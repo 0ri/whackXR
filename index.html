@@ -1,2338 +1,2021 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebXR Mole Shooter</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <style>
-    body { 
-      margin: 0; 
-      padding: 0; 
-      overflow: hidden; 
-      font-family: Arial, sans-serif; 
-      background-color: #222;
-      color: white;
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
     }
-    #ui-container {
+    
+    #container {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      color: white;
-      z-index: 100;
-      pointer-events: none;
-      width: 100%;
-    }
-    button {
-      pointer-events: auto;
-      padding: 10px 20px;
-      background: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 16px;
-      margin: 10px 0;
-      transition: background-color 0.2s;
-    }
-    button:hover {
-      background: #3e8e41;
-    }
-    button:active {
-      background: #2e6830;
-    }
-    #instructions {
-      background: rgba(0,0,0,0.7);
-      padding: 20px;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 400px;
-      margin: 0 auto;
-    }
-    #loading-screen {
-      position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background-color: rgba(0,0,0,0.8);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
+      background-color: #000;
+      z-index: 1;
+    }
+    
+    #ui-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 2;
+    }
+    
+    .button {
+      display: inline-block;
+      padding: 10px 20px;
+      background-color: #3498db;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      user-select: none;
+      pointer-events: auto;
+    }
+    
+    .button:hover {
+      background-color: #2980b9;
+    }
+    
+    .button:active {
+      background-color: #1c6ea4;
+    }
+    
+    .center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
       color: white;
     }
+    
+    .hidden {
+      display: none !important;
+    }
+    
+    #loading-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    
     .progress-bar {
-      width: 300px;
+      width: 80%;
       height: 20px;
       background-color: #333;
       border-radius: 10px;
       margin-top: 20px;
+      overflow: hidden;
     }
+    
     .progress {
       height: 100%;
-      background-color: #4CAF50;
-      border-radius: 10px;
+      background-color: #3498db;
       width: 0%;
-      transition: width 0.3s;
+      transition: width 0.3s ease;
     }
-    .non-vr-instructions {
-      background: rgba(0,0,0,0.7);
-      border-radius: 10px;
-      padding: 15px;
-      margin-top: 20px;
-      font-size: 14px;
-      max-width: 600px;
-      text-align: center;
+    
+    #game-title {
+      font-size: 2.5em;
+      margin-bottom: 20px;
+      color: #3498db;
+      text-shadow: 0 0 10px rgba(52, 152, 219, 0.7);
     }
-    #debug-info {
-      position: fixed;
+    
+    #version-info {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      color: #7f8c8d;
+      font-size: 0.8em;
+    }
+    
+    #debug-panel {
+      position: absolute;
       bottom: 10px;
       left: 10px;
-      background: rgba(0,0,0,0.7);
+      background-color: rgba(0, 0, 0, 0.7);
       color: white;
-      padding: 5px;
-      font-size: 12px;
+      padding: 10px;
       border-radius: 5px;
-      z-index: 1000;
+      font-family: monospace;
       max-width: 300px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 1000;
+      font-size: 12px;
       display: none;
+    }
+    
+    .game-mode-button {
+      margin: 10px;
+      padding: 15px 30px;
+      background-color: #3498db;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      user-select: none;
+      pointer-events: auto;
+      font-size: 1.2em;
+    }
+    
+    .game-mode-button:hover {
+      background-color: #2980b9;
+    }
+    
+    .game-mode-description {
+      margin-top: 5px;
+      font-size: 0.8em;
+      color: #bdc3c7;
     }
   </style>
 </head>
 <body>
+  <div id="container"></div>
+  <div id="ui-container">
+    <div id="start-screen" class="center">
+      <h1 id="game-title">WebXR Mole Shooter</h1>
+      <div id="ar-button" class="button">Start AR</div>
+      <div id="version-info">Version 1.0.5</div>
+    </div>
+  </div>
   <div id="loading-screen">
-    <h2>Loading WebXR Mole Shooter</h2>
+    <h2>Loading Game Assets</h2>
     <div class="progress-bar">
-      <div class="progress" id="progress-bar"></div>
+      <div id="progress" class="progress"></div>
     </div>
-    <p id="loading-status">Preparing game...</p>
-    <div class="non-vr-instructions">
-      <p><strong>Note:</strong> This game requires a WebXR compatible device and browser.<br>
-      If testing in a desktop browser, you can use a WebXR emulator extension.</p>
-      <p>1. Enter AR mode</p>
-      <p>2. Point your gun at the floor and pull the trigger to set up the play area</p>
-      <p>3. Select a game mode from the floating menu</p>
-      <p>4. Shoot the moles as they appear!</p>
-    </div>
+    <div id="loading-text">Loading models: 0/5</div>
   </div>
+  <div id="debug-panel"></div>
 
-  <div id="instructions">
-    <h1>WebXR Mole Shooter</h1>
-    <p>Enter AR to start the game</p>
-    <button id="enter-ar">Enter AR</button>
-  </div>
-  
-  <div id="debug-info"></div>
-  
-  <script type="module">
-    // Import Three.js from CDN
-    import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
+  <script>
+    // GAME VERSION
+    const GAME_VERSION = '1.0.5';
     
-    // GAME VARIABLES
-    let camera, scene, renderer;
-    let controller, controller2;
-    let raycaster = new THREE.Raycaster();
-    let tempMatrix = new THREE.Matrix4();
-    let tempVector = new THREE.Vector3();
-    let moles = [];
-    let powerUps = [];
-    let projectiles = [];
-    let score = 0;
-    let timeRemaining = 60;
+    // DEBUG FLAG - Set to true for debug output
+    const DEBUG = false;
+    
+    // Global variables
+    let container, scene, camera, renderer, controller1, controller2;
+    let reticle, hitTestSource = null, hitTestSourceRequested = false;
+    let floorReticle, floorY = 0;
+    let xrSession = null, xrReferenceSpace = null, xrHitTestSpace = null;
+    let raycaster, tempMatrix;
     let gameActive = false;
-    let gameInitialized = false;
-    let floorY = null;
-    let timer;
     let models = {};
-    let currentGameMode = 'classic';
-    let scoreMultiplier = 1;
+    let moles = [];
+    let projectiles = [];
+    let powerUps = [];
     let activePowerUps = {};
+    let scoreBoard = null;
+    let menuBoard = null;
     let lastFireTime = 0;
-    let crosshairCanvas = document.createElement('canvas');
-    let floorReticle;
-    let gamePhase = 'floor-selection'; // floor-selection, menu, playing, game-over
+    let modelCount = 0;
+    let totalModels = 5;
+    let score = 0;
+    let timeRemaining = 0;
+    let scoreMultiplier = 1;
+    let gameTimer = null;
+    let currentGameMode = null;
+    let currentDifficulty = null;
+    let speedMultiplier = 1;
+    let soundEnabled = true;
+    let hapticFeedbackEnabled = true;
+    let explosions = [];
+    let soundPool = {};
     
-    // 3D UI elements
-    let scoreBoard;
-    let menuBoard;
-    let gameButtons = [];
-    
-    // Debug mode
-    const DEBUG = true;
-    
-    // GAME MODES
-    const GAME_MODES = {
-      classic: {
-        name: "Classic",
-        description: "60 seconds to shoot as many moles as possible. Difficulty increases over time.",
-        duration: 60,
-        initialSpawnInterval: 2000,
-        minSpawnInterval: 500,
-        moleLifetime: 3000,
-        minMoleLifetime: 1000,
-        powerUpFrequency: 0.1
-      },
-      timeAttack: {
-        name: "Time Attack",
-        description: "Start with 30 seconds. Each hit adds time. How long can you last?",
-        duration: 30,
-        initialSpawnInterval: 1500,
-        minSpawnInterval: 400,
-        moleLifetime: 2500,
-        minMoleLifetime: 800,
-        timeBonus: 2,
-        powerUpFrequency: 0.15
-      },
-      endless: {
-        name: "Endless",
-        description: "Play until you miss 5 moles. Difficulty increases over time.",
-        duration: Infinity,
-        initialSpawnInterval: 2000,
-        minSpawnInterval: 400,
-        moleLifetime: 3000,
-        minMoleLifetime: 800,
-        missesAllowed: 5,
-        powerUpFrequency: 0.1
-      },
-      frenzy: {
-        name: "Frenzy",
-        description: "30 seconds of chaos! Tons of moles and power-ups.",
-        duration: 30,
-        initialSpawnInterval: 800,
-        minSpawnInterval: 300,
-        moleLifetime: 2000,
-        minMoleLifetime: 700,
-        powerUpFrequency: 0.25
-      }
-    };
-    
-    // GAME CONFIGURATION
+    // Game configuration
     const GAME_CONFIG = {
-      defaultPlayArea: { width: 3, depth: 3 }, // meters
-      moleTypes: [
-        { id: 'regular', probability: 0.7, points: 10, color: 0x8B4513, scale: 0.2, speed: 1 },
-        { id: 'fast', probability: 0.2, points: 20, color: 0x00AA00, scale: 0.18, speed: 1.5 },
-        { id: 'golden', probability: 0.1, points: 50, color: 0xFFD700, scale: 0.22, speed: 0.8 }
-      ],
-      powerUpTypes: [
-        { id: 'scoreMultiplier', name: 'Score x2', duration: 10000, color: 0xFF5500, scale: 0.2 },
-        { id: 'timeBonus', name: 'Time +10s', duration: 0, color: 0x00AAFF, scale: 0.2 },
-        { id: 'slowMoles', name: 'Slow Moles', duration: 8000, color: 0xAA00FF, scale: 0.2 },
-        { id: 'rapidFire', name: 'Rapid Fire', duration: 8000, color: 0xFF0000, scale: 0.2 }
-      ],
       projectile: {
-        speed: 15, // meters per second
+        speed: 5, // meters per second
+        size: 0.02, // meters
         lifetime: 2000, // milliseconds
-        cooldown: 300, // milliseconds between shots (will be shorter with rapid fire)
-        size: 0.05, // meters
-        color: 0x00FFFF
+        cooldown: 300, // milliseconds
       },
       ui: {
-        scoreBoardWidth: 1,
-        scoreBoardHeight: 0.5,
-        menuWidth: 1.2,
-        menuHeight: 1.0,
-        buttonWidth: 0.5,
-        buttonHeight: 0.15,
-        fontSize: 0.05
+        scoreBoardWidth: 0.3, // meters
+        scoreBoardHeight: 0.15, // meters
+        menuWidth: 0.4, // meters
+        menuHeight: 0.3, // meters
+        fontSizeTitle: 0.03, // meters
+        fontSize: 0.015, // meters
+      },
+      mole: {
+        spawnRadius: 1.5, // meters
+        minDistance: 0.5, // meters from center
+      },
+      powerUp: {
+        lifetime: 10000, // milliseconds
+        spawnRadius: 1.8, // meters
+        types: [
+          { id: 'rapidFire', name: 'Rapid Fire', duration: 10000, color: 0xff0000 },
+          { id: 'doublePoints', name: 'Double Points', duration: 15000, color: 0x00ff00 },
+          { id: 'timeSlow', name: 'Time Slow', duration: 8000, color: 0x0000ff },
+        ]
       }
     };
     
-    // Current difficulty settings
-    let currentDifficulty = {
-      spawnInterval: 2000,
-      moleLifetime: 3000,
-      misses: 0
+    // Game modes
+    const GAME_MODES = {
+      classic: {
+        name: 'Classic',
+        description: 'Hit as many moles as you can in 60 seconds',
+        timeLimit: 60000, // milliseconds (60 seconds)
+        spawnInterval: 1000, // milliseconds
+        difficultyIncrease: 10000, // milliseconds
+        powerUpSpawnInterval: 10000, // milliseconds
+      },
+      timeAttack: {
+        name: 'Time Attack',
+        description: 'Time counts down, hit moles to add time',
+        timeLimit: 30000, // milliseconds (30 seconds)
+        spawnInterval: 1000, // milliseconds
+        timeBonus: 2, // seconds added per hit
+        difficultyIncrease: 10000, // milliseconds
+        powerUpSpawnInterval: 15000, // milliseconds
+      },
+      endless: {
+        name: 'Endless',
+        description: 'Play until you miss too many moles',
+        spawnInterval: 1500, // milliseconds
+        difficultyIncrease: 10000, // milliseconds
+        missesAllowed: 3, // game ends after this many misses
+        powerUpSpawnInterval: 12000, // milliseconds
+      }
     };
     
-    // Sound generation with Web Audio API
-    let audioContext;
-    
-    function setupAudio() {
-      try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      } catch (e) {
-        console.error("Web Audio API not supported:", e);
-        audioContext = null;
+    // Difficulty levels
+    const DIFFICULTY_LEVELS = [
+      {
+        level: 1,
+        moleCount: 3,
+        spawnInterval: 1.0, // multiplier
+        moleLifetime: 2000, // milliseconds
+        misses: 0
+      },
+      {
+        level: 2,
+        moleCount: 4,
+        spawnInterval: 0.9, // multiplier
+        moleLifetime: 1800, // milliseconds
+        misses: 0
+      },
+      {
+        level: 3,
+        moleCount: 5,
+        spawnInterval: 0.8, // multiplier
+        moleLifetime: 1600, // milliseconds
+        misses: 0
+      },
+      {
+        level: 4,
+        moleCount: 5,
+        spawnInterval: 0.7, // multiplier
+        moleLifetime: 1400, // milliseconds
+        misses: 0
+      },
+      {
+        level: 5,
+        moleCount: 6,
+        spawnInterval: 0.6, // multiplier
+        moleLifetime: 1200, // milliseconds
+        misses: 0
       }
-    }
+    ];
     
-    function createSound(type) {
-      if (!audioContext) return;
-      
-      try {
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        switch (type) {
-          case 'pop':
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(220, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.1);
-            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.2);
-            break;
-            
-          case 'hit':
-            oscillator.type = 'square';
-            oscillator.frequency.setValueAtTime(660, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(220, audioContext.currentTime + 0.1);
-            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.2);
-            break;
-            
-          case 'miss':
-            oscillator.type = 'sawtooth';
-            oscillator.frequency.setValueAtTime(110, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(55, audioContext.currentTime + 0.2);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.3);
-            break;
-            
-          case 'powerUp':
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.1);
-            oscillator.frequency.exponentialRampToValueAtTime(1320, audioContext.currentTime + 0.2);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.5, audioContext.currentTime + 0.1);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.3);
-            break;
-            
-          case 'gameOver':
-            oscillator.type = 'triangle';
-            oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(110, audioContext.currentTime + 0.5);
-            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-            gainNode.gain.linearRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.8);
-            break;
-            
-          case 'fire':
-            oscillator.type = 'sawtooth';
-            oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.05);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.1);
-            break;
-            
-          case 'explosion':
-            oscillator.type = 'sawtooth';
-            oscillator.frequency.setValueAtTime(220, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(55, audioContext.currentTime + 0.2);
-            gainNode.gain.setValueAtTime(0.7, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.3);
-            break;
-        }
-      } catch (e) {
-        console.error("Error creating sound:", e);
-      }
-    }
+    // Mole types
+    const MOLE_TYPES = [
+      { id: 'standard', points: 10, speed: 1.0, scale: 0.2, probability: 0.7 },
+      { id: 'fast', points: 20, speed: 1.5, scale: 0.15, probability: 0.2 },
+      { id: 'big', points: 5, speed: 0.7, scale: 0.3, probability: 0.1 }
+    ];
     
-    // Debug logging function
+    // Utility functions
     function log(message) {
-      if (!DEBUG) return;
-      
-      console.log(message);
-      
-      const debugElement = document.getElementById('debug-info');
-      if (debugElement) {
-        debugElement.textContent = message;
-        debugElement.style.display = 'block';
-        
-        // Auto-hide after 3 seconds
-        setTimeout(() => {
-          debugElement.style.display = 'none';
-        }, 3000);
+      if (DEBUG) {
+        console.log(message);
+        const debugPanel = document.getElementById('debug-panel');
+        if (debugPanel) {
+          debugPanel.style.display = 'block';
+          const entry = document.createElement('div');
+          entry.textContent = message;
+          debugPanel.appendChild(entry);
+          // Keep only last 20 messages
+          while (debugPanel.childElementCount > 20) {
+            debugPanel.removeChild(debugPanel.firstChild);
+          }
+          // Scroll to bottom
+          debugPanel.scrollTop = debugPanel.scrollHeight;
+        }
       }
     }
     
-    // INITIALIZE GAME
-    function init() {
-      // Enable debug info
-      if (DEBUG) {
-        document.getElementById('debug-info').style.display = 'block';
+    function getRandomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+    
+    function getRandomFloat(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+    
+    function getRandomItem(array, probabilityProp = null) {
+      if (!array || array.length === 0) return null;
+      
+      if (probabilityProp) {
+        // Get items based on probability
+        const totalProbability = array.reduce((sum, item) => sum + item[probabilityProp], 0);
+        let random = Math.random() * totalProbability;
+        
+        for (const item of array) {
+          random -= item[probabilityProp];
+          if (random <= 0) {
+            return item;
+          }
+        }
+        return array[0]; // Fallback
+      } else {
+        // Simple random selection
+        return array[Math.floor(Math.random() * array.length)];
       }
+    }
+    
+    // Initialize the application
+    function init() {
+      log('Initializing application');
       
-      log('Initializing game...');
-      
-      // Update loading status
-      document.getElementById('loading-status').textContent = 'Setting up game environment...';
-      updateProgressBar(10);
-      
-      // Create scene
+      // Set up THREE.js scene
+      container = document.getElementById('container');
       scene = new THREE.Scene();
       
-      // Setup camera
+      // Set up camera
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
       
-      // Setup lighting
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      // Set up lighting
+      const ambientLight = new THREE.AmbientLight(0x404040, 2);
       scene.add(ambientLight);
       
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      directionalLight.position.set(0.5, 1, 0.25);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+      directionalLight.position.set(1, 1, 1).normalize();
       scene.add(directionalLight);
       
-      updateProgressBar(20);
-      document.getElementById('loading-status').textContent = 'Preparing renderer...';
-      
-      // Setup renderer
+      // Set up renderer
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
+      container.appendChild(renderer.domElement);
       
-      updateProgressBar(30);
-      document.getElementById('loading-status').textContent = 'Setting up AR environment...';
-      
-      // Initialize Web Audio
-      setupAudio();
-      
-      // Create XR button
-      const enterARButton = document.getElementById('enter-ar');
-      if (enterARButton) {
-        enterARButton.addEventListener('click', startAR);
-        log('AR button event listener added');
-      } else {
-        log('ERROR: Enter AR button not found!');
-      }
-      
-      // Create a grid for the floor
-      const floorGrid = new THREE.GridHelper(5, 10, 0x0080ff, 0xffffff);
-      floorGrid.name = 'floorGrid';
-      floorGrid.visible = false;
-      scene.add(floorGrid);
+      // Raycaster for interactions
+      raycaster = new THREE.Raycaster();
+      tempMatrix = new THREE.Matrix4();
       
       // Create floor reticle
-      floorReticle = new THREE.Mesh(
-        new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0x0080ff, side: THREE.DoubleSide })
-      );
+      const reticleGeometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
+      const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0x0080ff });
+      floorReticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
       floorReticle.visible = false;
       scene.add(floorReticle);
       
-      updateProgressBar(40);
-      document.getElementById('loading-status').textContent = 'Creating models...';
+      // Create floor grid
+      const gridHelper = new THREE.GridHelper(4, 10, 0x808080, 0x808080);
+      gridHelper.name = 'floorGrid';
+      gridHelper.visible = false;
+      scene.add(gridHelper);
       
-      // Create models
-      createPlaceholderModels();
+      // Add AR button
+      document.getElementById('ar-button').addEventListener('click', startAR);
       
-      // Create crosshair texture
-      createCrosshair();
+      // Set version number
+      document.getElementById('version-info').textContent = `Version ${GAME_VERSION}`;
       
-      // Create 3D UI elements
-      createScoreBoard();
-      createMenuBoard();
+      // Load models
+      loadModels();
       
-      updateProgressBar(90);
-      document.getElementById('loading-status').textContent = 'Starting game engine...';
+      // Handle window resize
+      window.addEventListener('resize', onWindowResize, false);
       
-      // Set up event listeners
-      window.addEventListener('resize', onWindowResize);
-      
-      // Start animation loop
+      // Start rendering
       renderer.setAnimationLoop(render);
       
-      updateProgressBar(100);
-      document.getElementById('loading-status').textContent = 'Ready!';
-      
-      // Hide loading screen after a short delay
-      setTimeout(() => {
-        document.getElementById('loading-screen').style.display = 'none';
-      }, 1000);
-      
-      log('Initialization complete, ready to start AR');
+      log('Initialization complete');
     }
     
-// REPLACE THE startAR() FUNCTION with this improved version
-function startAR() {
-  log('AR button clicked, checking for WebXR support...');
-  
-  if (!navigator.xr) {
-    log('ERROR: WebXR not supported on this browser');
-    alert('WebXR not supported on this browser');
-    return;
-  }
-  
-  navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-    if (supported) {
-      log('AR is supported, requesting session...');
-      
-      // Get the UI container element
-      const uiContainer = document.getElementById('ui-container');
-      
-      // Basic session options without DOM overlay
-      const sessionOptions = {
-        requiredFeatures: ['hit-test']
-      };
-      
-      // Add DOM overlay as optional if the UI container exists
-      if (uiContainer) {
-        sessionOptions.optionalFeatures = ['dom-overlay'];
-        sessionOptions.domOverlay = { root: uiContainer };
-        log('DOM overlay configured with ui-container');
-      } else {
-        log('WARNING: UI container not found, continuing without DOM overlay');
-      }
-      
-      navigator.xr.requestSession('immersive-ar', sessionOptions)
-        .then(onSessionStarted)
-        .catch(error => {
-          log('ERROR starting AR session: ' + error.message);
-          
-          // Try again without DOM overlay if that was the issue
-          if (error.message.includes('domOverlay') || error.message.includes('Element')) {
-            log('Trying again without DOM overlay...');
-            
-            navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['hit-test']
-            }).then(onSessionStarted)
-            .catch(finalError => {
-              log('FINAL ERROR: ' + finalError.message);
-              alert('Failed to start AR: ' + finalError.message);
-            });
-          } else {
-            alert('Failed to start AR: ' + error.message);
-          }
-        });
-    } else {
-      log('ERROR: AR not supported on this device');
-      alert('AR not supported on this device');
-    }
-  }).catch(error => {
-    log('ERROR checking AR support: ' + error.message);
-    alert('Error checking AR support: ' + error.message);
-  });
-}
-    
-    function updateProgressBar(percent) {
-      document.getElementById('progress-bar').style.width = `${percent}%`;
-    }
-    
-    // Create crosshair texture
-    function createCrosshair() {
-      crosshairCanvas.width = 64;
-      crosshairCanvas.height = 64;
-      const ctx = crosshairCanvas.getContext('2d');
-      
-      ctx.clearRect(0, 0, 64, 64);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#00FFFF';
-      
-      // Outer circle
-      ctx.beginPath();
-      ctx.arc(32, 32, 20, 0, 2 * Math.PI);
-      ctx.stroke();
-      
-      // Inner circle
-      ctx.beginPath();
-      ctx.arc(32, 32, 5, 0, 2 * Math.PI);
-      ctx.stroke();
-      
-      // Crosshairs
-      ctx.beginPath();
-      ctx.moveTo(32, 12);
-      ctx.lineTo(32, 20);
-      ctx.moveTo(32, 44);
-      ctx.lineTo(32, 52);
-      ctx.moveTo(12, 32);
-      ctx.lineTo(20, 32);
-      ctx.moveTo(44, 32);
-      ctx.lineTo(52, 32);
-      ctx.stroke();
-    }
-    
-    // Create scoreboard in 3D
-    function createScoreBoard() {
-      const { scoreBoardWidth, scoreBoardHeight } = GAME_CONFIG.ui;
-  
-    // Create a group for the scoreboard
-    scoreBoard = new THREE.Group();
-    scoreBoard.position.set(0, 0.7, -1.5); // CHANGED: Lower position (0.7m above floor)
-    scoreBoard.visible = false;
-    scene.add(scoreBoard);
-  
-    // Rotate the scoreboard to be angled up slightly for better visibility
-    scoreBoard.rotation.x = -Math.PI / 8; // Tilt upward slightly
-      
-      // Scoreboard background
-      const scoreBackground = new THREE.Mesh(
-        new THREE.PlaneGeometry(scoreBoardWidth, scoreBoardHeight),
-        new THREE.MeshBasicMaterial({ 
-          color: 0x000000, 
-          transparent: true, 
-          opacity: 0.7,
-          side: THREE.DoubleSide
-        })
-      );
-      scoreBoard.add(scoreBackground);
-      
-      // Create text canvas
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 256;
-      const context = canvas.getContext('2d');
-      
-      // Create texture from canvas
-      const texture = new THREE.CanvasTexture(canvas);
-      
-      // Create material and mesh for text
-      const textMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(scoreBoardWidth * 0.9, scoreBoardHeight * 0.9),
-        new THREE.MeshBasicMaterial({ 
-          map: texture,
-          transparent: true,
-          side: THREE.DoubleSide
-        })
-      );
-      textMesh.position.z = 0.01; // Slightly in front of background
-      scoreBoard.add(textMesh);
-      
-      // Function to update score display
-      scoreBoard.updateScore = function(score, time, multiplier = 1) {
-        context.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Set background
-        context.fillStyle = 'rgba(0,0,0,0)';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Draw score
-        context.font = 'bold 60px Arial';
-        context.fillStyle = '#FFFFFF';
-        context.textAlign = 'center';
-        context.fillText(`Score: ${score}`, 256, 100);
-        
-        // Draw multiplier if active
-        if (multiplier > 1) {
-          context.fillStyle = '#FFDD00';
-          context.fillText(`x${multiplier}`, 400, 100);
-        }
-        
-        // Draw time
-        const timeStr = time === Infinity ? '∞' : Math.max(0, Math.floor(time));
-        context.fillStyle = '#00AAFF';
-        context.fillText(`Time: ${timeStr}`, 256, 180);
-        
-        // Update texture
-        texture.needsUpdate = true;
-      };
-      
-      // Initialize display
-      scoreBoard.updateScore(0, 60);
-    }
-    
-    // Create menu board in 3D
-    function createMenuBoard() {
-      const { menuWidth, menuHeight, buttonWidth, buttonHeight } = GAME_CONFIG.ui;
-      
-      // Create a group for the menu
-      menuBoard = new THREE.Group();
-      menuBoard.position.set(0, 1.3, -1); // Above and in front of player
-      menuBoard.visible = false;
-      scene.add(menuBoard);
-      
-      // Menu background
-      const menuBackground = new THREE.Mesh(
-        new THREE.PlaneGeometry(menuWidth, menuHeight),
-        new THREE.MeshBasicMaterial({ 
-          color: 0x000000, 
-          transparent: true, 
-          opacity: 0.8,
-          side: THREE.DoubleSide
-        })
-      );
-      menuBoard.add(menuBackground);
-      
-      // Add title
-      const titleCanvas = document.createElement('canvas');
-      titleCanvas.width = 512;
-      titleCanvas.height = 128;
-      const titleContext = titleCanvas.getContext('2d');
-      
-      titleContext.fillStyle = 'rgba(0,0,0,0)';
-      titleContext.fillRect(0, 0, titleCanvas.width, titleCanvas.height);
-      
-      titleContext.font = 'bold 50px Arial';
-      titleContext.fillStyle = '#FFFFFF';
-      titleContext.textAlign = 'center';
-      titleContext.fillText('Select Game Mode', 256, 70);
-      
-      const titleTexture = new THREE.CanvasTexture(titleCanvas);
-      const titleMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(menuWidth * 0.9, 0.2),
-        new THREE.MeshBasicMaterial({ 
-          map: titleTexture,
-          transparent: true,
-          side: THREE.DoubleSide
-        })
-      );
-      titleMesh.position.y = menuHeight * 0.35;
-      titleMesh.position.z = 0.01;
-      menuBoard.add(titleMesh);
-      
-      // Create buttons for each game mode
-      const modes = Object.keys(GAME_MODES);
-      const buttonPositions = [
-        { x: -buttonWidth * 0.6, y: buttonHeight * 1.5 },
-        { x: buttonWidth * 0.6, y: buttonHeight * 1.5 },
-        { x: -buttonWidth * 0.6, y: 0 },
-        { x: buttonWidth * 0.6, y: 0 }
-      ];
-      
-      modes.forEach((mode, index) => {
-        const button = createButton(
-          GAME_MODES[mode].name,
-          buttonWidth,
-          buttonHeight,
-          0x4CAF50
-        );
-        
-        button.position.x = buttonPositions[index].x;
-        button.position.y = buttonPositions[index].y;
-        button.position.z = 0.02;
-        button.userData = { type: 'game-mode', mode: mode };
-        
-        menuBoard.add(button);
-        gameButtons.push(button);
-      });
-      
-      // Add description area
-      const descCanvas = document.createElement('canvas');
-      descCanvas.width = 512;
-      descCanvas.height = 128;
-      const descContext = descCanvas.getContext('2d');
-      
-      descContext.fillStyle = 'rgba(0,0,0,0)';
-      descContext.fillRect(0, 0, descCanvas.width, descCanvas.height);
-      
-      const descTexture = new THREE.CanvasTexture(descCanvas);
-      const descMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(menuWidth * 0.9, 0.25),
-        new THREE.MeshBasicMaterial({ 
-          map: descTexture,
-          transparent: true,
-          side: THREE.DoubleSide
-        })
-      );
-      descMesh.position.y = -menuHeight * 0.32;
-      descMesh.position.z = 0.01;
-      menuBoard.add(descMesh);
-      
-      // Function to update description
-      menuBoard.updateDescription = function(text) {
-        descContext.clearRect(0, 0, descCanvas.width, descCanvas.height);
-        
-        descContext.fillStyle = 'rgba(0,0,0,0)';
-        descContext.fillRect(0, 0, descCanvas.width, descCanvas.height);
-        
-        descContext.font = '20px Arial';
-        descContext.fillStyle = '#FFFFFF';
-        descContext.textAlign = 'center';
-        
-        const words = text.split(' ');
-        let line = '';
-        let y = 40;
-        
-        for (let i = 0; i < words.length; i++) {
-          const testLine = line + words[i] + ' ';
-          const metrics = descContext.measureText(testLine);
-          
-          if (metrics.width > 490 && i > 0) {
-            descContext.fillText(line, 256, y);
-            line = words[i] + ' ';
-            y += 30;
-          } else {
-            line = testLine;
-          }
-        }
-        descContext.fillText(line, 256, y);
-        
-        descTexture.needsUpdate = true;
-      };
-      
-      // Default description
-      menuBoard.updateDescription('Select a game mode above to see description');
-    }
-    
-    // Create a 3D button
-    function createButton(text, width, height, color) {
-      const button = new THREE.Group();
-      
-      // Button background
-      const background = new THREE.Mesh(
-        new THREE.PlaneGeometry(width, height),
-        new THREE.MeshBasicMaterial({ 
-          color: color, 
-          side: THREE.DoubleSide
-        })
-      );
-      button.add(background);
-      
-      // Button text
-      const canvas = document.createElement('canvas');
-      canvas.width = 256;
-      canvas.height = 64;
-      const context = canvas.getContext('2d');
-      
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.font = 'bold 30px Arial';
-      context.fillStyle = '#FFFFFF';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(text, 128, 32);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const textMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(width * 0.9, height * 0.8),
-        new THREE.MeshBasicMaterial({ 
-          map: texture,
-          transparent: true,
-          side: THREE.DoubleSide
-        })
-      );
-      
-      textMesh.position.z = 0.001;
-      button.add(textMesh);
-      
-      // Hover effect
-      button.hover = function() {
-        background.material.color.set(0x3e8e41);
-      };
-      
-      button.unhover = function() {
-        background.material.color.set(color);
-      };
-      
-      return button;
-    }
-    
-    // Create placeholder models for moles and power-ups
-    function createPlaceholderModels() {
-      // Create mole placeholder models
-      for (const moleType of GAME_CONFIG.moleTypes) {
-        // Create a simple cylinder as placeholder
-        const geometry = new THREE.CylinderGeometry(0.2, 0.2, 0.4, 32);
-        const material = new THREE.MeshPhongMaterial({ color: moleType.color });
-        const mesh = new THREE.Mesh(geometry, material);
-        
-        // Add eyes and nose
-        const eyeGeometry = new THREE.SphereGeometry(0.05, 16, 16);
-        const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        
-        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-        leftEye.position.set(0.1, 0.1, 0.15);
-        mesh.add(leftEye);
-        
-        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-        rightEye.position.set(-0.1, 0.1, 0.15);
-        mesh.add(rightEye);
-        
-        const noseGeometry = new THREE.SphereGeometry(0.03, 16, 16);
-        const noseMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        const nose = new THREE.Mesh(noseGeometry, noseMaterial);
-        nose.position.set(0, 0, 0.2);
-        mesh.add(nose);
-        
-        // Create a container for the model
-        const container = new THREE.Group();
-        container.add(mesh);
-        
-        // Store in models object
-        models[moleType.id] = { object: container };
-      }
-      
-      // Create power-up placeholder models
-      for (const powerUpType of GAME_CONFIG.powerUpTypes) {
-        // Create a simple cube as placeholder
-        const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-        const material = new THREE.MeshPhongMaterial({ color: powerUpType.color });
-        const mesh = new THREE.Mesh(geometry, material);
-        
-        // Add icon based on type
-        const iconGeometry = new THREE.PlaneGeometry(0.2, 0.2);
-        const iconMaterial = new THREE.MeshBasicMaterial({ 
-          color: 0xFFFFFF,
-          transparent: true,
-          opacity: 0.8
-        });
-        const icon = new THREE.Mesh(iconGeometry, iconMaterial);
-        icon.position.set(0, 0, 0.152);
-        mesh.add(icon);
-        
-        // Create a container for the model
-        const container = new THREE.Group();
-        container.add(mesh);
-        
-        // Store in models object
-        models[powerUpType.id] = { object: container };
-      }
-      
-      // Create gun model for controllers
-      const gunGroup = new THREE.Group();
-      
-      // Gun barrel
-      const barrel = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.01, 0.01, 0.2, 16),
-        new THREE.MeshPhongMaterial({ color: 0x444444 })
-      );
-      barrel.rotation.x = Math.PI / 2;
-      barrel.position.z = -0.1;
-      gunGroup.add(barrel);
-      
-      // Gun body
-      const body = new THREE.Mesh(
-        new THREE.BoxGeometry(0.04, 0.06, 0.08),
-        new THREE.MeshPhongMaterial({ color: 0x222222 })
-      );
-      body.position.y = -0.03;
-      body.position.z = -0.02;
-      gunGroup.add(body);
-      
-      // Gun handle
-      const handle = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.015, 0.02, 0.08, 16),
-        new THREE.MeshPhongMaterial({ color: 0x111111 })
-      );
-      handle.position.y = -0.08;
-      gunGroup.add(handle);
-      
-      // Gun sight
-      const sight = new THREE.Mesh(
-        new THREE.BoxGeometry(0.01, 0.01, 0.01),
-        new THREE.MeshPhongMaterial({ color: 0xFF0000 })
-      );
-      sight.position.y = 0.03;
-      sight.position.z = -0.06;
-      gunGroup.add(sight);
-      
-      // Add crosshair
-      const crosshairTexture = new THREE.CanvasTexture(crosshairCanvas);
-      const crosshair = new THREE.Sprite(
-        new THREE.SpriteMaterial({ 
-          map: crosshairTexture,
-          transparent: true,
-          opacity: 0.7
-        })
-      );
-      crosshair.position.z = -2;
-      crosshair.scale.set(0.2, 0.2, 0.2);
-      gunGroup.add(crosshair);
-      
-      models.gun = { object: gunGroup };
-      
-      // Create a projectile model
-      const projectileGeometry = new THREE.SphereGeometry(GAME_CONFIG.projectile.size, 16, 16);
-      const projectileMaterial = new THREE.MeshPhongMaterial({ 
-        color: GAME_CONFIG.projectile.color,
-        emissive: GAME_CONFIG.projectile.color,
-        emissiveIntensity: 0.5
-      });
-      const projectileMesh = new THREE.Mesh(projectileGeometry, projectileMaterial);
-      
-      models.projectile = { object: projectileMesh };
-      
-      // Create explosion particles model
-      const particleGroup = new THREE.Group();
-      const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xFF5500 });
-      
-      for (let i = 0; i < 20; i++) {
-        const size = Math.random() * 0.03 + 0.01;
-        const particleGeometry = new THREE.SphereGeometry(size, 8, 8);
-        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-        particleGroup.add(particle);
-      }
-      
-      models.explosion = { object: particleGroup };
-    }
-    
-    // Session handlers
-    function onSessionStarted(session) {
-      log('AR session started!');
-      document.getElementById('instructions').style.display = 'none';
-      
-      // Make sure audio context is running (needed for user interaction)
-      if (audioContext && audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      
-      session.addEventListener('end', onSessionEnded);
-      
-      renderer.xr.setReferenceSpaceType('local');
-      renderer.xr.setSession(session);
-      
-      // Setup controllers
-      controller = renderer.xr.getController(0);
-      controller.addEventListener('select', onSelect);
-      controller.addEventListener('selectstart', onSelectStart);
-      controller.addEventListener('selectend', onSelectEnd);
-      scene.add(controller);
-      
-      log('Controller 0 added');
-      
-      // Add gun model to controller
-      const gun = models.gun.object.clone();
-      controller.add(gun);
-      
-      // Set up second controller if available
-      controller2 = renderer.xr.getController(1);
-      controller2.addEventListener('select', onSelect);
-      controller2.addEventListener('selectstart', onSelectStart);
-      controller2.addEventListener('selectend', onSelectEnd);
-      scene.add(controller2);
-      
-      // Add gun model to second controller
-      const gun2 = models.gun.object.clone();
-      controller2.add(gun2);
-      
-      log('Controller 1 added');
-      
-      // Set up floor selection mode
-      gamePhase = 'floor-selection';
-      floorReticle.visible = true;
-      
-      // Add help text for floor selection
-      createInstructionText("Point at floor and pull trigger to select play area", 0, 1.2, -1.5);
-      
-      log('Floor selection mode activated');
-    }
-    
-    function onSessionEnded() {
-      log('AR session ended');
-      document.getElementById('instructions').style.display = 'block';
-      endGame();
-      
-      // Reset game state
-      gamePhase = 'floor-selection';
-      gameInitialized = false;
-      floorY = null;
-      floorReticle.visible = false;
-      
-      // Hide 3D UI
-      if (scoreBoard) scoreBoard.visible = false;
-      if (menuBoard) menuBoard.visible = false;
-    }
-    
-    // Create floating instruction text
-    function createInstructionText(text, x, y, z) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 128;
-      const context = canvas.getContext('2d');
-      
-      context.fillStyle = 'rgba(0,0,0,0.7)';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      
-      context.font = 'bold 24px Arial';
-      context.fillStyle = '#FFFFFF';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(text, 256, 64);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.SpriteMaterial({
-        map: texture,
-        transparent: true
-      });
-      
-      const sprite = new THREE.Sprite(material);
-      sprite.position.set(x, y, z);
-      sprite.scale.set(2, 0.5, 1);
-      sprite.name = 'instruction-text';
-      scene.add(sprite);
-      
-      // Auto-remove after 5 seconds
-      setTimeout(() => {
-        scene.remove(sprite);
-      }, 5000);
-    }
-    
-    // Input handlers
-    function onSelect(event) {
-      const controller = event.target;
-      log(`Select event triggered in phase: ${gamePhase}`);
-      
-      if (gamePhase === 'floor-selection') {
-        // Use the controller to place the floor
-        if (floorReticle.visible) {
-          placeFloor(floorReticle.position.y);
-        } else {
-          // Try to place the floor based on controller position
-          tempVector.setFromMatrixPosition(controller.matrixWorld);
-          placeFloor(tempVector.y - 0.5); // Offset below controller
-        }
-      } else if (gamePhase === 'menu') {
-        // Check for button interactions
-        handleMenuInteraction(controller);
-      } else if (gamePhase === 'playing') {
-        // When playing, check for collisions with projectiles
-        checkProjectileCollisions();
-      } else if (gamePhase === 'game-over') {
-        // Return to menu
-        showMenu();
-      }
-    }
-    
-    function onSelectStart(event) {
-      // Trigger shooting when user pulls the trigger
-      if (gamePhase === 'playing') {
-        fireProjectile(event.target);
-      }
-    }
-    
-    function onSelectEnd(event) {
-      // Nothing needed here for now
-    }
-    
-// ADD this function to clearly show floor level:
-function visualizeFloorLevel() {
-  // Create a floor visualization plane
-  const floorVisGeometry = new THREE.PlaneGeometry(5, 5);
-  const floorVisMaterial = new THREE.MeshBasicMaterial({
-    color: 0x00ff00,
-    transparent: true,
-    opacity: 0.3,
-    side: THREE.DoubleSide
-  });
-  
-  const floorVisualization = new THREE.Mesh(floorVisGeometry, floorVisMaterial);
-  floorVisualization.rotation.x = -Math.PI / 2; // Horizontal
-  floorVisualization.position.y = floorY;
-  floorVisualization.name = 'floor-visualization';
-  scene.add(floorVisualization);
-  
-  log(`Floor visualization added at y=${floorY}`);
-}
-
-// Call this in the placeFloor function just before initializing the game:
-function placeFloor(yPosition) {
-  floorY = yPosition;
-  log(`Floor placed at y=${floorY}`);
-  
-  // Show the floor grid
-  const floorGrid = scene.getObjectByName('floorGrid');
-  if (floorGrid) {
-    floorGrid.position.y = floorY;
-    floorGrid.visible = true;
-  }
-  
-  // Add floor visualization
-  visualizeFloorLevel();
-  
-  // Hide the reticle
-  floorReticle.visible = false;
-  
-  // Initialize the game
-  initializeGame();
-}
-
-// ADD this new function to create a floor marker:
-
-function createFloorMarker(y) {
-  // Create a circular marker for the floor
-  const markerGeometry = new THREE.CircleGeometry(2, 32);
-  const markerMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0x4080ff, 
-    transparent: true, 
-    opacity: 0.3,
-    side: THREE.DoubleSide 
-  });
-  const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-  marker.rotation.x = -Math.PI / 2; // Make it horizontal
-  marker.position.set(0, y + 0.01, 0); // Just above floor level
-  marker.name = 'floor-marker';
-  scene.add(marker);
-}
-    
-    // Initialize the game after floor is selected
-    function initializeGame() {
-      gameInitialized = true;
-      gamePhase = 'menu';
-      
-      log('Game initialized, showing menu');
-      
-      // Show the menu
-      showMenu();
-    }
-    
-    // Show menu for game mode selection
-    function showMenu() {
-      gamePhase = 'menu';
-      log('Menu displayed');
-      
-      // Hide scoreboard, show menu
-      if (scoreBoard) scoreBoard.visible = false;
-      if (menuBoard) {
-        menuBoard.visible = true;
-        
-        // Update menu position to face camera
-        updateMenuPosition();
-      }
-      
-      // Create new instruction
-      createInstructionText("Choose a game mode and shoot to select", 0, 1.9, -1);
-    }
-    
-    // Update menu position to face player
-    function updateMenuPosition() {
-  if (!menuBoard) return;
-  
-  const cameraPos = new THREE.Vector3();
-  camera.getWorldPosition(cameraPos);
-  
-  // Position menu in front of player but closer to floor level
-  menuBoard.position.x = cameraPos.x;
-  menuBoard.position.y = Math.max(floorY + 0.8, cameraPos.y - 0.5); // Positioned above floor
-  menuBoard.position.z = cameraPos.z - 1;
-  
-  // Make menu face the camera
-  menuBoard.lookAt(cameraPos.x, menuBoard.position.y, cameraPos.z);
-}
-    
-    // Handle menu button interactions
-    function handleMenuInteraction(controller) {
-      // Cast ray from controller
-      tempMatrix.identity().extractRotation(controller.matrixWorld);
-      raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-      
-      // Check intersections with buttons
-      for (const button of gameButtons) {
-        const intersects = raycaster.intersectObject(button, true);
-        
-        if (intersects.length > 0) {
-          // Highlight the button
-          button.hover();
-          
-          if (button.userData.type === 'game-mode') {
-            // Update description
-            const mode = button.userData.mode;
-            menuBoard.updateDescription(GAME_MODES[mode].description);
-            
-            // Start the selected game mode
-            log(`Game mode selected: ${mode}`);
-            selectGameMode(mode);
-          }
-          
-          // Trigger haptic feedback
-          triggerHapticFeedback(controller);
-          
-          return;
-        } else {
-          button.unhover();
-        }
-      }
-    }
-    
-    // Fire a projectile from the controller
-// REPLACE the fireProjectile function with this completely rewritten version
-function fireProjectile(fromController) {
-  const now = Date.now();
-  const cooldown = activePowerUps.rapidFire ? 
-                  GAME_CONFIG.projectile.cooldown / 2 : 
-                  GAME_CONFIG.projectile.cooldown;
-                  
-  if (now - lastFireTime < cooldown) {
-    return; // Still in cooldown
-  }
-  
-  lastFireTime = now;
-  
-  // Create projectile visual
-  const projectile = models.projectile.object.clone();
-  scene.add(projectile);
-  
-  // Set up raycaster from controller
-  raycaster.ray.origin.setFromMatrixPosition(fromController.matrixWorld);
-  tempMatrix.identity().extractRotation(fromController.matrixWorld);
-  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-  
-  // Visualize projectile path (for debug)
-  const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-    raycaster.ray.origin.clone(),
-    raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(10))
-  ]);
-  const lineMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
-  const line = new THREE.Line(lineGeometry, lineMaterial);
-  scene.add(line);
-  
-  // Animate the projectile
-  const startPos = raycaster.ray.origin.clone();
-  const velocity = raycaster.ray.direction.clone().multiplyScalar(GAME_CONFIG.projectile.speed);
-  const startTime = now;
-  
-  // Store info to check for collisions
-  const projectileInfo = {
-    object: projectile,
-    ray: raycaster.ray.clone(),
-    createdAt: now
-  };
-  
-  // Projectile animation and collision detection in one function
-  const animateProjectile = () => {
-    const elapsed = (Date.now() - startTime) / 1000; // seconds
-    const distance = GAME_CONFIG.projectile.speed * elapsed;
-    
-    // Update projectile position
-    projectile.position.copy(startPos).add(velocity.clone().multiplyScalar(elapsed));
-    
-    // DIRECT HIT TESTING - check all moles to see if we hit any
-    let hit = false;
-    moles.forEach(mole => {
-      if (mole.state === 'up' || mole.state === 'rising') {
-        // Get distance from projectile to mole
-        const molePos = mole.object.position.clone();
-        const dist = projectile.position.distanceTo(molePos);
-        
-        // If close enough, it's a hit
-        if (dist < 0.4) { // Generous hit radius
-          hit = true;
-          log(`HIT MOLE at distance ${dist.toFixed(2)}`);
-          
-          // Create explosion effect
-          createExplosion(molePos.x, molePos.y, molePos.z);
-          
-          // Play sound and haptic feedback
-          createSound('hit');
-          createSound('explosion');
-          triggerHapticFeedback(fromController);
-          
-          // Update score
-          const points = mole.type.points;
-          updateScore(points);
-          showFloatingPoints(molePos.x, molePos.y, molePos.z, points);
-          
-          // Add time in time attack mode
-          if (currentGameMode === 'timeAttack' && GAME_MODES.timeAttack) {
-            const timeBonus = GAME_MODES.timeAttack.timeBonus;
-            timeRemaining += timeBonus;
-            if (scoreBoard) scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-            showFloatingTime(molePos.x, molePos.y, molePos.z, timeBonus);
-          }
-          
-          // Force the mole to go down
-          mole.state = 'hit';
-          mole.object.traverse(child => {
-            if (child.isMesh && child.material) {
-              child.material.emissive = new THREE.Color(0xFF0000);
-            }
-          });
-          mole.goDown();
-          
-          // Remove projectile and line
-          scene.remove(projectile);
-          scene.remove(line);
-        }
-      }
-    });
-    
-    // Also check for power-up hits (simplified)
-    if (!hit) {
-      powerUps.forEach(powerUp => {
-        if (powerUp.active) {
-          const powerUpPos = powerUp.object.position.clone();
-          const dist = projectile.position.distanceTo(powerUpPos);
-          
-          if (dist < 0.4) {
-            hit = true;
-            activatePowerUp(powerUp);
-            triggerHapticFeedback(fromController);
-            createSound('powerUp');
-            
-            // Remove projectile
-            scene.remove(projectile);
-            scene.remove(line);
-          }
-        }
-      });
-    }
-    
-    // Continue animation if projectile still exists and hasn't hit anything
-    if (!hit && Date.now() - startTime < GAME_CONFIG.projectile.lifetime) {
-      requestAnimationFrame(animateProjectile);
-    } else {
-      // Remove projectile at end of lifetime
-      if (!hit) {
-        scene.remove(projectile);
-        scene.remove(line);
-      }
-    }
-  };
-  
-  // Start animation
-  animateProjectile();
-  
-  // Play sound
-  createSound('fire');
-  
-  // Trigger haptic feedback
-  triggerHapticFeedback(fromController);
-  
-  return projectileInfo;
-}
-
-// REMOVE the old checkProjectileCollisions function - we don't need it anymore
-// Because collision is now handled in the projectile animation
-    
-    // Update projectiles
-    function updateProjectiles() {
-      const now = Date.now();
-      const projectilesToRemove = [];
-      
-      // Update positions
-      for (let i = 0; i < projectiles.length; i++) {
-        const projectile = projectiles[i];
-        
-        // Check lifetime
-        if (now - projectile.createdAt > GAME_CONFIG.projectile.lifetime) {
-          scene.remove(projectile.object);
-          projectilesToRemove.push(i);
-          continue;
-        }
-        
-        // Update position
-        projectile.object.position.add(projectile.velocity.clone().multiplyScalar(0.016)); // Assuming ~60fps
-      }
-      
-      // Remove expired projectiles
-      for (let i = projectilesToRemove.length - 1; i >= 0; i--) {
-        projectiles.splice(projectilesToRemove[i], 1);
-      }
-    }
-    
-    // Create explosion effect
-    function createExplosion(x, y, z) {
-      const explosion = models.explosion.object.clone();
-      explosion.position.set(x, y, z);
-      scene.add(explosion);
-      
-      // Randomize particle positions and velocities
-      const velocities = [];
-      explosion.children.forEach(particle => {
-        // Random starting position near center
-        particle.position.set(
-          (Math.random() - 0.5) * 0.1,
-          (Math.random() - 0.5) * 0.1,
-          (Math.random() - 0.5) * 0.1
-        );
-        
-        // Random velocity outward
-        velocities.push(new THREE.Vector3(
-          (Math.random() - 0.5) * 0.05,
-          (Math.random() - 0.5) * 0.05 + 0.02, // Slight upward bias
-          (Math.random() - 0.5) * 0.05
-        ));
-      });
-      
-      // Animate explosion
-      const startTime = Date.now();
-      const duration = 1000;
-      
-      const animateExplosion = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Move particles outward
-        explosion.children.forEach((particle, i) => {
-          particle.position.add(velocities[i]);
-          velocities[i].y -= 0.001; // Gravity
-          
-          // Scale down as they disperse
-          const scale = (1 - progress) * 1;
-          particle.scale.set(scale, scale, scale);
-        });
-        
-        // Continue animation until complete
-        if (progress < 1) {
-          requestAnimationFrame(animateExplosion);
-        } else {
-          scene.remove(explosion);
-        }
-      };
-      
-      animateExplosion();
-    }
-    
-    // Haptic feedback
-    function triggerHapticFeedback(specificController = null) {
-      const controllers = specificController ? [specificController] : [controller, controller2];
-      
-      controllers.forEach(ctrl => {
-        if (ctrl && ctrl.gamepad && ctrl.gamepad.hapticActuators && 
-            ctrl.gamepad.hapticActuators.length > 0) {
-          ctrl.gamepad.hapticActuators[0].pulse(1.0, 100);
-        }
-      });
-    }
-    
-    // Game mode selection
-    function selectGameMode(mode) {
-      currentGameMode = mode;
-      
-      // Hide menu
-      if (menuBoard) menuBoard.visible = false;
-      
-      // Start game
-      startGame();
-    }
-    
-    // Score management
-    function updateScore(points) {
-      const actualPoints = points * scoreMultiplier;
-      score += actualPoints;
-      
-      // Update 3D scoreboard
-      if (scoreBoard) {
-        scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-      }
-    }
-    
-    // Game mechanics
-    function startGame() {
-      if (!gameInitialized || floorY === null) {
-        log('ERROR: Game not properly initialized');
-        return;
-      }
-      
-      // Set game phase
-      gamePhase = 'playing';
-      log(`Game started: ${currentGameMode} mode`);
-      
-      // Reset game state
-      gameActive = true;
-      score = 0;
-      scoreMultiplier = 1;
-      
-      // Clear active power-ups
-      activePowerUps = {};
-      
-      // Set up selected game mode
-      const mode = GAME_MODES[currentGameMode];
-      timeRemaining = mode.duration;
-      
-      // Reset difficulty
-      currentDifficulty = {
-        spawnInterval: mode.initialSpawnInterval,
-        moleLifetime: mode.moleLifetime,
-        misses: 0
-      };
-
-// Show scoreboard
-if (scoreBoard) {
-  scoreBoard.visible = true;
-  scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-  
-  // Position scoreboard at floor level
-  const playerPosition = new THREE.Vector3();
-  camera.getWorldPosition(playerPosition);
-  
-  // Force a very specific position - directly in front of player, just above floor
-  scoreBoard.position.set(
-    playerPosition.x,  // Same x as player
-    floorY + 0.4,      // Just 0.4 meters above floor - very low
-    playerPosition.z - 1.2  // Slightly closer to player
-  );
-  
-  // Tilt it up to be visible
-  scoreBoard.rotation.set(-Math.PI/4, 0, 0);
-  
-  log(`Positioned scoreboard at y=${scoreBoard.position.y}, floor=${floorY}`);
-}
-      
-      // Start spawning moles
-      spawnMole();
-      
-      // Occasionally spawn power-ups
-      if (Math.random() < mode.powerUpFrequency * 2) {
-        setTimeout(() => spawnPowerUp(), mode.initialSpawnInterval * 3);
-      }
-      
-      // Start difficulty progression
-      setTimeout(increaseDifficulty, 10000);
-      
-      // Start the timer (for finite duration modes)
-      if (timer) clearInterval(timer);
-      if (timeRemaining !== Infinity) {
-        timer = setInterval(() => {
-          timeRemaining--;
-          
-          // Update scoreboard
-          if (scoreBoard) {
-            scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-          }
-          
-          if (timeRemaining <= 0) {
-            clearInterval(timer);
-            endGame();
-          }
-        }, 1000);
-      }
-    }
-    
-    function endGame() {
-      gameActive = false;
-      gamePhase = 'game-over';
-      log(`Game over. Final score: ${score}`);
-      
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-      
-      createSound('gameOver');
-      
-      // Create game over message in 3D
-      const gameOverCanvas = document.createElement('canvas');
-      gameOverCanvas.width = 512;
-      gameOverCanvas.height = 256;
-      const context = gameOverCanvas.getContext('2d');
-      
-      context.fillStyle = 'rgba(0,0,0,0.7)';
-      context.fillRect(0, 0, gameOverCanvas.width, gameOverCanvas.height);
-      
-      context.font = 'bold 60px Arial';
-      context.fillStyle = '#FFFFFF';
-      context.textAlign = 'center';
-      context.fillText('Game Over!', 256, 80);
-      
-      context.font = 'bold 40px Arial';
-      context.fillText(`Final Score: ${score}`, 256, 150);
-      
-      context.font = '24px Arial';
-      context.fillText('Pull trigger to return to menu', 256, 200);
-      
-      const texture = new THREE.CanvasTexture(gameOverCanvas);
-      const gameOverMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(1, 0.5),
-        new THREE.MeshBasicMaterial({ 
-          map: texture,
-          transparent: true,
-          side: THREE.DoubleSide
-        })
-      );
-      
-      // Position in front of player
-      const cameraPos = new THREE.Vector3();
-      camera.getWorldPosition(cameraPos);
-      gameOverMesh.position.copy(cameraPos);
-      gameOverMesh.position.z -= 1;
-      gameOverMesh.lookAt(cameraPos);
-      
-      scene.add(gameOverMesh);
-      
-      // Store reference to remove later
-      if (scoreBoard) {
-        scoreBoard.userData.gameOverMesh = gameOverMesh;
-      }
-      
-      // Save high score to localStorage
-      updateHighScores();
-      
-      // Remove all moles and power-ups
-      moles.forEach(mole => {
-        scene.remove(mole.object);
-      });
-      moles = [];
-      
-      powerUps.forEach(powerUp => {
-        scene.remove(powerUp.object);
-      });
-      powerUps = [];
-      
-      // Remove all projectiles
-      projectiles.forEach(projectile => {
-        scene.remove(projectile.object);
-      });
-      projectiles = [];
-      
-      // Hide scoreboard after a delay
-      setTimeout(() => {
-        if (scoreBoard) {
-          scoreBoard.visible = false;
-          
-          // Remove game over mesh if exists
-          if (scoreBoard.userData.gameOverMesh) {
-            scene.remove(scoreBoard.userData.gameOverMesh);
-            delete scoreBoard.userData.gameOverMesh;
-          }
-        }
-        
-        // Show menu
-        showMenu();
-      }, 5000);
-    }
-    
-    // HIGH SCORES
-    function updateHighScores() {
-      // Get current high scores from localStorage
-      let highScores = getHighScores();
-      
-      // Add current score
-      highScores.push({
-        mode: currentGameMode,
-        score: score,
-        date: new Date().toISOString()
-      });
-      
-      // Sort by score descending
-      highScores.sort((a, b) => b.score - a.score);
-      
-      // Keep only top 10
-      highScores = highScores.slice(0, 10);
-      
-      // Save back to localStorage
-      localStorage.setItem('whackamole_highscores', JSON.stringify(highScores));
-    }
-    
-    function getHighScores() {
-      const storedScores = localStorage.getItem('whackamole_highscores');
-      return storedScores ? JSON.parse(storedScores) : [];
-    }
-    
-    // Difficulty progression
-    function increaseDifficulty() {
-      if (!gameActive) return;
-      
-      const mode = GAME_MODES[currentGameMode];
-      
-      // Decrease spawn interval
-      currentDifficulty.spawnInterval = Math.max(
-        mode.minSpawnInterval,
-        currentDifficulty.spawnInterval * 0.9
-      );
-      
-      // Decrease mole lifetime
-      currentDifficulty.moleLifetime = Math.max(
-        mode.minMoleLifetime,
-        currentDifficulty.moleLifetime * 0.9
-      );
-      
-      // Schedule next difficulty increase
-      if (gameActive) {
-        setTimeout(increaseDifficulty, 10000);
-      }
-    }
-    
-    // MOLE CREATION AND MANAGEMENT
-    function spawnMole() {
-      if (!gameActive) return;
-      
-      // Random position within play area
-      const x = (Math.random() - 0.5) * GAME_CONFIG.defaultPlayArea.width;
-      const z = (Math.random() - 0.5) * GAME_CONFIG.defaultPlayArea.depth;
-      
-      // Create mole
-      const mole = createMole(x, floorY, z);
-      
-      // Schedule next spawn
-      setTimeout(spawnMole, currentDifficulty.spawnInterval);
-    }
-    
-    function createMole(x, y, z) {
-      // Determine mole type
-      const rand = Math.random();
-      let cumulativeProbability = 0;
-      let selectedType = GAME_CONFIG.moleTypes[0];
-      
-      for (const type of GAME_CONFIG.moleTypes) {
-        cumulativeProbability += type.probability;
-        if (rand <= cumulativeProbability) {
-          selectedType = type;
-          break;
-        }
-      }
-// Clone the mole model     
-const moleModel = models[selectedType.id].object.clone();
-
-// Set scale
-moleModel.scale.set(selectedType.scale, selectedType.scale, selectedType.scale);
-
-// Position - START COMPLETELY UNDER THE FLOOR
-moleModel.position.set(x, y - 0.5, z);  // Fully below floor
-scene.add(moleModel);
-
-
-      // Apply slow effect if active
-      let speedMultiplier = 1;
-      if (activePowerUps.slowMoles) {
-        speedMultiplier = 0.5;
-      }
-      
-      // Create mole object
-      const mole = {
-        object: moleModel,
-        state: 'down',
-        type: selectedType,
-        
-        riseUp: function() {
-  if (this.state !== 'down' || !gameActive) return;
-  
-  this.state = 'rising';
-  const startY = y - 0.5;             // Under floor
-  const targetY = y + 0.4;            // HIGHER above floor (0.4m)
-  const startTime = Date.now();
-  const duration = 500 / (this.type.speed * speedMultiplier);
-  
-  createSound('pop');
-  
-  log(`Mole rising from ${startY} to ${targetY}, floor=${y}`);
-  
-  const animate = () => {
-    const elapsed = Date.now() - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    
-    moleModel.position.y = startY + (targetY - startY) * progress;
-    
-    if (progress < 1 && this.state === 'rising') {
-      requestAnimationFrame(animate);
-    } else {
-      this.state = 'up';
-      
-      // Schedule going down
-      setTimeout(() => this.goDown(), currentDifficulty.moleLifetime / (this.type.speed * speedMultiplier));
-    }
-  };
-  
-  animate();
-},
-        
-goDown: function() {
-  if ((this.state !== 'up' && this.state !== 'hit') || !gameActive) return;
-  
-  this.state = 'lowering';
-  const startY = moleModel.position.y;  // Current position (might be above floor)
-  const targetY = y - 0.4;              // End position (below floor)
-  const startTime = Date.now();
-  const duration = 500 / (this.type.speed * speedMultiplier);
-  
-  // Play miss sound if in endless mode and mole wasn't hit
-  if (currentGameMode === 'endless' && this.state !== 'hit') {
-    createSound('miss');
-    currentDifficulty.misses++;
-    
-    if (currentDifficulty.misses >= GAME_MODES.endless.missesAllowed) {
-      endGame();
-      return;
-    }
-  }
-  
-  const animate = () => {
-    const elapsed = Date.now() - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    
-    moleModel.position.y = startY + (targetY - startY) * progress;
-    
-    if (progress < 1 && this.state === 'lowering') {
-      requestAnimationFrame(animate);
-    } else {
-      this.state = 'down';
-      
-      // Remove the mole
-      const index = moles.indexOf(this);
-      if (index > -1) {
-        moles.splice(index, 1);
-        scene.remove(moleModel);
-      }
-    }
-  };
-  
-  animate();
-},
-        
-        hit: function() {
-          if (this.state !== 'up') return 0;
-          
-          // Change color to red (visual feedback)
-          moleModel.traverse(child => {
-            if (child.isMesh && child.material) {
-              child.material.emissive = new THREE.Color(0xFF0000);
-            }
-          });
-          
-          // Go down immediately
-          this.goDown();
-          
-          return this.type.points;
-        }
-      };
-      
-      moles.push(mole);
-      mole.riseUp();
-      
-      return mole;
-    }
-    
-    // POWER-UP CREATION AND MANAGEMENT
-    function spawnPowerUp() {
-      if (!gameActive) return;
-      
-      // Random position within play area
-      const x = (Math.random() - 0.5) * GAME_CONFIG.defaultPlayArea.width;
-      const z = (Math.random() - 0.5) * GAME_CONFIG.defaultPlayArea.depth;
-      
-      // Randomly select power-up type
-      const typeIndex = Math.floor(Math.random() * GAME_CONFIG.powerUpTypes.length);
-      const powerUpType = GAME_CONFIG.powerUpTypes[typeIndex];
-      
-      // Create power-up
-      createPowerUp(x, floorY, z, powerUpType);
-      
-      // Schedule next power-up spawn
-      const mode = GAME_MODES[currentGameMode];
-      if (Math.random() < mode.powerUpFrequency) {
-        setTimeout(() => spawnPowerUp(), mode.initialSpawnInterval * 5);
-      }
-    }
-    
-    function createPowerUp(x, y, z, powerUpType) {
-      // Clone the power-up model
-      const powerUpModel = models[powerUpType.id].object.clone();
-      
-      // Set scale
-      powerUpModel.scale.set(powerUpType.scale, powerUpType.scale, powerUpType.scale);
-      
-      // Position at floor level
-      powerUpModel.position.set(x, y + 0.2, z);
-      scene.add(powerUpModel);
-      
-      // Add floating animation
-      const startY = y + 0.2;
-      const startTime = Date.now();
-      
-      function animatePowerUp() {
-        if (!gameActive) return;
-        
-        const elapsed = (Date.now() - startTime) / 1000;
-        powerUpModel.position.y = startY + Math.sin(elapsed * 2) * 0.05;
-        powerUpModel.rotation.y += 0.02;
-        
-        requestAnimationFrame(animatePowerUp);
-      }
-      
-      animatePowerUp();
-      
-      // Create power-up object
-      const powerUp = {
-        object: powerUpModel,
-        type: powerUpType,
-        active: true,
-        
-        collect: function() {
-          this.active = false;
-          
-          // Remove the power-up
-          const index = powerUps.indexOf(this);
-          if (index > -1) {
-            powerUps.splice(index, 1);
-            
-            // Fade out and remove
-            const startTime = Date.now();
-            const duration = 500;
-            
-            const animate = () => {
-              const elapsed = Date.now() - startTime;
-              const progress = Math.min(elapsed / duration, 1);
-              
-              powerUpModel.position.y = y + 0.2 + progress * 0.5;
-              
-              // Fade out by scaling down
-              const scale = (1 - progress) * powerUpType.scale;
-              powerUpModel.scale.set(scale, scale, scale);
-              
-              if (progress < 1) {
-                requestAnimationFrame(animate);
-              } else {
-                scene.remove(powerUpModel);
-              }
-            };
-            
-            animate();
-          }
-          
-          return this.type;
-        }
-      };
-      
-      powerUps.push(powerUp);
-      
-      // Auto-expire after 10 seconds
-      setTimeout(() => {
-        if (powerUp.active) {
-          powerUp.active = false;
-          const index = powerUps.indexOf(powerUp);
-          if (index > -1) {
-            powerUps.splice(index, 1);
-            scene.remove(powerUpModel);
-          }
-        }
-      }, 10000);
-      
-      return powerUp;
-    }
-    
-    function activatePowerUp(powerUp) {
-      const collectedType = powerUp.collect();
-      
-      switch(collectedType.id) {
-        case 'scoreMultiplier':
-          // Double score for duration
-          scoreMultiplier = 2;
-          activePowerUps.scoreMultiplier = true;
-          
-          // Update scoreboard
-          if (scoreBoard) {
-            scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-          }
-          
-          // Reset after duration
-          setTimeout(() => {
-            scoreMultiplier = 1;
-            activePowerUps.scoreMultiplier = false;
-            
-            // Update scoreboard
-            if (scoreBoard) {
-              scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-            }
-          }, collectedType.duration);
-          break;
-          
-        case 'timeBonus':
-          // Add time if not in endless mode
-          if (timeRemaining !== Infinity) {
-            timeRemaining += 10;
-            
-            // Update scoreboard
-            if (scoreBoard) {
-              scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-            }
-          }
-          break;
-          
-        case 'slowMoles':
-          // Slow all moles for duration
-          activePowerUps.slowMoles = true;
-          
-          // Reset after duration
-          setTimeout(() => {
-            activePowerUps.slowMoles = false;
-          }, collectedType.duration);
-          break;
-          
-        case 'rapidFire':
-          // Enable rapid fire for duration
-          activePowerUps.rapidFire = true;
-          
-          // Reset after duration
-          setTimeout(() => {
-            activePowerUps.rapidFire = false;
-          }, collectedType.duration);
-          break;
-      }
-      
-      // Show floating text
-      showFloatingText(powerUp.object.position.x, powerUp.object.position.y, powerUp.object.position.z, collectedType.name);
-    }
-    
-    // VISUAL EFFECTS
-    function createHitEffect(x, y, z) {
-      const particleCount = 20;
-      const geometry = new THREE.BufferGeometry();
-      const positions = new Float32Array(particleCount * 3);
-      
-      for (let i = 0; i < particleCount; i++) {
-        const i3 = i * 3;
-        positions[i3] = x;
-        positions[i3 + 1] = y;
-        positions[i3 + 2] = z;
-      }
-      
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      
-      const material = new THREE.PointsMaterial({
-        color: 0xFFD700,
-        size: 0.05,
-        transparent: true
-      });
-      
-      const particles = new THREE.Points(geometry, material);
-      scene.add(particles);
-      
-      // Animate particles
-      const velocities = [];
-      for (let i = 0; i < particleCount; i++) {
-        velocities.push({
-          x: (Math.random() - 0.5) * 0.1,
-          y: Math.random() * 0.1,
-          z: (Math.random() - 0.5) * 0.1
-        });
-      }
-      
-      const startTime = Date.now();
-      const duration = 1000;
-      
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        const positions = particles.geometry.attributes.position.array;
-        
-        for (let i = 0; i < particleCount; i++) {
-          const i3 = i * 3;
-          positions[i3] += velocities[i].x;
-          positions[i3 + 1] += velocities[i].y;
-          positions[i3 + 2] += velocities[i].z;
-          
-          // Add gravity
-          velocities[i].y -= 0.003;
-        }
-        
-        particles.geometry.attributes.position.needsUpdate = true;
-        particles.material.opacity = 1 - progress;
-        
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          scene.remove(particles);
-        }
-      };
-      
-      animate();
-    }
-    
-    // Show floating score points
-    function showFloatingPoints(x, y, z, points) {
-      const actualPoints = points * scoreMultiplier;
-      
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = 256;
-      canvas.height = 256;
-      
-      context.font = "Bold 60px Arial";
-      context.fillStyle = actualPoints > points ? "rgba(255,215,0,1)" : "rgba(255,255,255,1)";
-      context.textAlign = "center";
-      context.fillText(`+${actualPoints}`, 128, 128);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.SpriteMaterial({ 
-        map: texture,
-        transparent: true
-      });
-      const sprite = new THREE.Sprite(material);
-      
-      sprite.position.set(x, y + 0.5, z);
-      sprite.scale.set(0.5, 0.5, 0.5);
-      scene.add(sprite);
-      
-      // Animate floating text
-      const startTime = Date.now();
-      const duration = 1000;
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        sprite.position.y = y + 0.5 + progress * 0.5;
-        sprite.material.opacity = 1 - progress;
-        
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          scene.remove(sprite);
-        }
-      };
-      
-      animate();
-    }
-    
-    // Show floating time bonus
-    function showFloatingTime(x, y, z, timeBonus) {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = 256;
-      canvas.height = 256;
-      
-      context.font = "Bold 60px Arial";
-      context.fillStyle = "rgba(0,170,255,1)";
-      context.textAlign = "center";
-      context.fillText(`+${timeBonus}s`, 128, 128);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.SpriteMaterial({ 
-        map: texture,
-        transparent: true
-      });
-      const sprite = new THREE.Sprite(material);
-      
-      sprite.position.set(x, y + 0.5, z);
-      sprite.scale.set(0.5, 0.5, 0.5);
-      scene.add(sprite);
-      
-      // Animate floating text
-      const startTime = Date.now();
-      const duration = 1000;
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        sprite.position.y = y + 0.5 + progress * 0.5;
-        sprite.material.opacity = 1 - progress;
-        
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          scene.remove(sprite);
-        }
-      };
-      
-      animate();
-    }
-    
-    // Show floating text for power-ups
-    function showFloatingText(x, y, z, text) {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = 512;
-      canvas.height = 256;
-      
-      context.font = "Bold 50px Arial";
-      context.fillStyle = "rgba(255,255,100,1)";
-      context.strokeStyle = "rgba(0,0,0,0.8)";
-      context.lineWidth = 4;
-      context.textAlign = "center";
-      context.strokeText(text, 256, 128);
-      context.fillText(text, 256, 128);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.SpriteMaterial({ 
-        map: texture,
-        transparent: true
-      });
-      const sprite = new THREE.Sprite(material);
-      
-      sprite.position.set(x, y + 0.6, z);
-      sprite.scale.set(1, 0.5, 1);
-      scene.add(sprite);
-      
-      // Animate floating text
-      const startTime = Date.now();
-      const duration = 1500;
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        sprite.position.y = y + 0.6 + progress * 0.7;
-        
-        // Pulse size for emphasis
-        const pulseFactor = 1 + Math.sin(progress * Math.PI * 4) * 0.1 * (1 - progress);
-        sprite.scale.set(pulseFactor, pulseFactor * 0.5, pulseFactor);
-        
-        // Fade out near the end
-        if (progress > 0.7) {
-          sprite.material.opacity = (1 - progress) / 0.3;
-        }
-        
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          scene.remove(sprite);
-        }
-      };
-      
-      animate();
-    }
-    
-    // Update floor reticle position
-    function updateFloorReticle() {
-      if (gamePhase !== 'floor-selection' || !controller) return;
-      
-      // Get controller position
-      tempVector.setFromMatrixPosition(controller.matrixWorld);
-      
-      // Cast ray from controller
-      tempMatrix.identity().extractRotation(controller.matrixWorld);
-      raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-      
-      // Create a plane 1.5 meters below the camera
-      const cameraPos = new THREE.Vector3();
-      camera.getWorldPosition(cameraPos);
-      const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -cameraPos.y + 1.5);
-      
-      // Find intersection with the plane
-      const intersectionPoint = new THREE.Vector3();
-      const hasIntersection = raycaster.ray.intersectPlane(floorPlane, intersectionPoint);
-      
-      if (hasIntersection) {
-        // Update reticle position
-        floorReticle.position.copy(intersectionPoint);
-        floorReticle.visible = true;
-      } else {
-        // If no intersection, place reticle in front of controller
-        const forward = new THREE.Vector3(0, 0, -2);
-        forward.applyMatrix4(tempMatrix);
-        floorReticle.position.copy(raycaster.ray.origin).add(forward);
-        floorReticle.position.y = cameraPos.y - 1.5; // 1.5 meters below camera
-        floorReticle.visible = true;
-      }
-      
-      // Always face the reticle upward
-      floorReticle.rotation.x = -Math.PI / 2;
-    }
-    
-    // Window resize handler
+    // Handle window resize
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
     
-    // Main render loop
-    function render(timestamp, frame) {
-      // Update projectiles
-      updateProjectiles();
+    // Start AR session
+    function startAR() {
+      log('AR button clicked, checking for WebXR support...');
       
-      // Update floor reticle
-      updateFloorReticle();
-      
-      // Check for projectile collisions
-      if (gamePhase === 'playing') {
-        checkProjectileCollisions();
+      if (!navigator.xr) {
+        log('ERROR: WebXR not supported on this browser');
+        alert('WebXR not supported on this browser');
+        return;
       }
       
+      navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+        if (supported) {
+          log('AR is supported, requesting session...');
+          
+          // Get the UI container element
+          const uiContainer = document.getElementById('ui-container');
+          
+          // Basic session options without DOM overlay
+          const sessionOptions = {
+            requiredFeatures: ['hit-test']
+          };
+          
+          // Add DOM overlay as optional if the UI container exists
+          if (uiContainer) {
+            sessionOptions.optionalFeatures = ['dom-overlay'];
+            sessionOptions.domOverlay = { root: uiContainer };
+            log('DOM overlay configured with ui-container');
+          } else {
+            log('WARNING: UI container not found, continuing without DOM overlay');
+          }
+          
+          navigator.xr.requestSession('immersive-ar', sessionOptions)
+            .then(onSessionStarted)
+            .catch(error => {
+              log('ERROR starting AR session: ' + error.message);
+              
+              // Try again without DOM overlay if that was the issue
+              if (error.message.includes('domOverlay') || error.message.includes('Element')) {
+                log('Trying again without DOM overlay...');
+                
+                navigator.xr.requestSession('immersive-ar', {
+                  requiredFeatures: ['hit-test']
+                }).then(onSessionStarted)
+                .catch(finalError => {
+                  log('FINAL ERROR: ' + finalError.message);
+                  alert('Failed to start AR: ' + finalError.message);
+                });
+              } else {
+                alert('Failed to start AR: ' + error.message);
+              }
+            });
+        } else {
+          log('ERROR: AR not supported on this device');
+          alert('AR not supported on this device');
+        }
+      }).catch(error => {
+        log('ERROR checking AR support: ' + error.message);
+        alert('Error checking AR support: ' + error.message);
+      });
+    }
+    
+    // When AR session starts
+    function onSessionStarted(session) {
+      log('AR session started');
+      xrSession = session;
+      
+      // Hide start screen
+      document.getElementById('start-screen').classList.add('hidden');
+      
+      // Set up session
+      session.addEventListener('end', onSessionEnded);
+      session.addEventListener('select', onSelect);
+      
+      // Set up renderer for XR
+      renderer.xr.setReferenceSpaceType('local');
+      renderer.xr.setSession(session);
+      
+      // Set up controllers
+      controller1 = renderer.xr.getController(0);
+      controller1.addEventListener('selectstart', onSelectStart);
+      controller1.addEventListener('selectend', onSelectEnd);
+      scene.add(controller1);
+      
+      controller2 = renderer.xr.getController(1);
+      controller2.addEventListener('selectstart', onSelectStart);
+      controller2.addEventListener('selectend', onSelectEnd);
+      scene.add(controller2);
+      
+      // Start hit testing once reference space is available
+      session.requestReferenceSpace('viewer').then((referenceSpace) => {
+        xrSession.requestHitTestSource({ space: referenceSpace }).then((source) => {
+          hitTestSource = source;
+        });
+      });
+      
+      session.requestReferenceSpace('local').then((referenceSpace) => {
+        xrReferenceSpace = referenceSpace;
+        
+        // Create instruction text
+        createInstructionText('Find a flat surface and tap to place the game');
+      });
+      
+      // Create menu once models are loaded
+      if (modelCount === totalModels) {
+        createMenu();
+      } else {
+        // Show loading screen until models are loaded
+        document.getElementById('loading-screen').style.display = 'flex';
+      }
+    }
+    
+    // Create text instructions in 3D space
+    function createInstructionText(message) {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = 512;
+      canvas.height = 256;
+      
+      context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      
+      context.font = '40px Arial';
+      context.fillStyle = 'white';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(message, canvas.width / 2, canvas.height / 2);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 0.8
+      });
+      
+      const geometry = new THREE.PlaneGeometry(1, 0.5);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = 'instruction-text';
+      mesh.position.set(0, 0, -1);
+      
+      const textGroup = new THREE.Group();
+      textGroup.add(mesh);
+      textGroup.position.set(0, 0, -1);
+      textGroup.name = 'instruction-text';
+      
+      scene.add(textGroup);
+      
+      return textGroup;
+    }
+    
+    // Handle session end
+    function onSessionEnded() {
+      log('AR session ended');
+      xrSession = null;
+      hitTestSource = null;
+      hitTestSourceRequested = false;
+      
+      // Reset game state
+      endGame();
+      
+      // Show start screen again
+      document.getElementById('start-screen').classList.remove('hidden');
+    }
+    
+    // Handle select start (trigger press)
+    function onSelectStart(event) {
+      const controller = event.target;
+      controller.userData.isSelecting = true;
+      
+      if (gameActive) {
+        fireProjectile(controller);
+      }
+    }
+    
+    // Handle select end (trigger release)
+    function onSelectEnd(event) {
+      const controller = event.target;
+      controller.userData.isSelecting = false;
+    }
+    
+    // Handle select event (tap)
+    function onSelect(event) {
+      if (floorReticle.visible) {
+        // Place the floor at the reticle position
+        placeFloor(floorReticle.position.y);
+      }
+    }
+    
+    // Load game models
+    function loadModels() {
+      log('Loading models...');
+      document.getElementById('loading-screen').style.display = 'flex';
+      
+      const loadingText = document.getElementById('loading-text');
+      const progressBar = document.getElementById('progress');
+      
+      // Set up loaders
+      const dracoLoader = new THREE.DRACOLoader();
+      dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+      
+      const gltfLoader = new THREE.GLTFLoader();
+      gltfLoader.setDRACOLoader(dracoLoader);
+      
+      // Create a simple mole model
+      createSimpleMoleModel('standard', 0x8B4513);
+      createSimpleMoleModel('fast', 0xFF0000);
+      createSimpleMoleModel('big', 0x8B4513);
+      
+      // Create a simple projectile model
+      createSimpleProjectileModel();
+      
+      // Create a simple power-up model
+      createSimplePowerUpModel();
+      
+      function updateLoadingProgress() {
+        modelCount++;
+        const progress = (modelCount / totalModels) * 100;
+        progressBar.style.width = `${progress}%`;
+        loadingText.textContent = `Loading models: ${modelCount}/${totalModels}`;
+        
+        if (modelCount === totalModels) {
+          document.getElementById('loading-screen').style.display = 'none';
+          log('All models loaded');
+          
+          // Create menu if session has already started
+          if (xrSession) {
+            createMenu();
+          }
+        }
+      }
+      
+      function createSimpleMoleModel(type, color) {
+        // Create a simple mole model with basic geometry
+        const group = new THREE.Group();
+        
+        // Body
+        const bodyGeometry = new THREE.SphereGeometry(0.5, 32, 16);
+        const bodyMaterial = new THREE.MeshStandardMaterial({ color });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = 0.25;
+        group.add(body);
+        
+        // Eyes
+        const eyeGeometry = new THREE.SphereGeometry(0.08, 16, 8);
+        const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
+        
+        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        leftEye.position.set(0.2, 0.35, 0.4);
+        group.add(leftEye);
+        
+        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        rightEye.position.set(-0.2, 0.35, 0.4);
+        group.add(rightEye);
+        
+        // Pupils
+        const pupilGeometry = new THREE.SphereGeometry(0.04, 8, 8);
+        const pupilMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+        
+        const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+        leftPupil.position.set(0.2, 0.35, 0.48);
+        group.add(leftPupil);
+        
+        const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+        rightPupil.position.set(-0.2, 0.35, 0.48);
+        group.add(rightPupil);
+        
+        // Nose
+        const noseGeometry = new THREE.SphereGeometry(0.1, 16, 8);
+        const noseMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+        const nose = new THREE.Mesh(noseGeometry, noseMaterial);
+        nose.position.set(0, 0.2, 0.48);
+        group.add(nose);
+        
+        // Add to models
+        models[type] = {
+          object: group
+        };
+        
+        updateLoadingProgress();
+      }
+      
+      function createSimpleProjectileModel() {
+        // Create a simple projectile model
+        const geometry = new THREE.SphereGeometry(GAME_CONFIG.projectile.size, 16, 8);
+        const material = new THREE.MeshStandardMaterial({ 
+          color: 0xFFFF00,
+          emissive: 0xFFFF00,
+          emissiveIntensity: 0.5
+        });
+        const sphere = new THREE.Mesh(geometry, material);
+        
+        models.projectile = {
+          object: sphere
+        };
+        
+        updateLoadingProgress();
+      }
+      
+      function createSimplePowerUpModel() {
+        // Create a simple power-up model (rotating cube)
+        const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+        const material = new THREE.MeshStandardMaterial({ 
+          color: 0x00FFFF,
+          emissive: 0x00FFFF,
+          emissiveIntensity: 0.5,
+          transparent: true,
+          opacity: 0.8
+        });
+        const cube = new THREE.Mesh(geometry, material);
+        
+        models.powerUp = {
+          object: cube
+        };
+        
+        updateLoadingProgress();
+      }
+    }
+    
+    // Place floor at the given Y position
+    function placeFloor(yPosition) {
+      floorY = yPosition;
+      log(`Floor placed at y=${floorY}`);
+      
+      // Show the floor grid
+      const floorGrid = scene.getObjectByName('floorGrid');
+      if (floorGrid) {
+        floorGrid.position.y = floorY;
+        floorGrid.visible = true;
+        log('Floor grid visible');
+      }
+      
+      // Show additional visual marker for the floor
+      createFloorMarker(floorY);
+      
+      // Hide the reticle
+      floorReticle.visible = false;
+      
+      // Remove any instruction text
+      scene.children.forEach(child => {
+        if (child.name === 'instruction-text') {
+          scene.remove(child);
+        }
+      });
+      
+      // Initialize the game
+      initializeGame();
+    }
+    
+    // Create a visual marker for the floor
+    function createFloorMarker(y) {
+      // Create a circular marker for the floor
+      const markerGeometry = new THREE.CircleGeometry(2, 32);
+      const markerMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x4080ff, 
+        transparent: true, 
+        opacity: 0.3,
+        side: THREE.DoubleSide 
+      });
+      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+      marker.rotation.x = -Math.PI / 2; // Make it horizontal
+      marker.position.set(0, y + 0.01, 0); // Just above floor level
+      marker.name = 'floor-marker';
+      scene.add(marker);
+    }
+    
+    // Create game menu
+    function createMenu() {
+      log('Creating game menu');
+      
+      // Create a menu board
+      menuBoard = new THREE.Group();
+      menuBoard.name = 'menu-board';
+      scene.add(menuBoard);
+      
+      // Create a background plane
+      const { menuWidth, menuHeight } = GAME_CONFIG.ui;
+      const menuGeometry = new THREE.PlaneGeometry(menuWidth, menuHeight);
+      const menuMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide
+      });
+      const menuPane = new THREE.Mesh(menuGeometry, menuMaterial);
+      menuBoard.add(menuPane);
+      
+      // Create title text
+      createMenuText('Select Game Mode', 0, menuHeight / 2 - 0.03, 0.02, menuBoard);
+      
+      // Create buttons for each game mode
+      let yOffset = menuHeight / 2 - 0.08;
+      Object.entries(GAME_MODES).forEach(([modeId, mode], index) => {
+        yOffset -= 0.06;
+        const button = createMenuButton(mode.name, 0, yOffset, 0.15, 0.04, () => {
+          startGame(modeId);
+        });
+        menuBoard.add(button);
+        
+        createMenuText(mode.description, 0, yOffset - 0.035, 0.012, menuBoard, 0xCCCCCC);
+        
+        yOffset -= 0.03;
+      });
+      
+      // Version text at bottom
+      createMenuText(`Version ${GAME_VERSION}`, 0, -menuHeight / 2 + 0.02, 0.012, menuBoard, 0x888888);
+      
+      updateMenuPosition();
+      log('Menu created');
+    }
+    
+    // Create text for the menu
+    function createMenuText(message, x, y, size, parent, color = 0xFFFFFF) {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = 512;
+      canvas.height = 128;
+      
+      context.fillStyle = 'rgba(0, 0, 0, 0)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      
+      context.font = 'bold 48px Arial';
+      context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(message, canvas.width / 2, canvas.height / 2);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 1
+      });
+      
+      const textWidth = size * 5;
+      const textHeight = size * 1.25;
+      const geometry = new THREE.PlaneGeometry(textWidth, textHeight);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, y, 0.001);
+      
+      parent.add(mesh);
+      return mesh;
+    }
+    
+    // Create a button for the menu
+    function createMenuButton(text, x, y, width, height, onClick) {
+      const group = new THREE.Group();
+      group.position.set(x, y, 0);
+      
+      // Button background
+      const geometry = new THREE.PlaneGeometry(width, height);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x3498db,
+        transparent: true,
+        opacity: 0.9
+      });
+      const background = new THREE.Mesh(geometry, material);
+      background.position.z = 0.001;
+      group.add(background);
+      
+      // Button text
+      const textMesh = createMenuText(text, 0, 0, height * 0.5, group);
+      textMesh.position.z = 0.002;
+      
+      // Store click handler
+      group.userData = { onClick };
+      
+      return group;
+    }
+    
+    // Update menu position relative to camera
+    function updateMenuPosition() {
+      if (!menuBoard) return;
+      
+      const cameraPos = new THREE.Vector3();
+      camera.getWorldPosition(cameraPos);
+      
+      // Position menu in front of player but closer to floor level
+      menuBoard.position.x = cameraPos.x;
+      menuBoard.position.y = Math.max(floorY + 0.8, cameraPos.y - 0.5); // Positioned above floor
+      menuBoard.position.z = cameraPos.z - 1;
+      
+      // Make menu face the camera
+      menuBoard.lookAt(cameraPos.x, menuBoard.position.y, cameraPos.z);
+    }
+    
+    // Initialize the game
+    function initializeGame() {
+      log('Initializing game');
+      
+      // Create scoreboard
+      createScoreBoard();
+      
+      // Hide the loading screen
+      document.getElementById('loading-screen').style.display = 'none';
+      
+      // Initialize sound pool
+      initSoundPool();
+      
+      // Show menu
+      if (menuBoard) {
+        menuBoard.visible = true;
+        updateMenuPosition();
+      }
+    }
+    
+    // Create the scoreboard
+    function createScoreBoard() {
+      const { scoreBoardWidth, scoreBoardHeight } = GAME_CONFIG.ui;
+      
+      // Create a group for the scoreboard
+      scoreBoard = new THREE.Group();
+      scoreBoard.position.set(0, 0.7, -1.5); // CHANGED: Lower position (0.7m above floor)
+      scoreBoard.visible = false;
+      scene.add(scoreBoard);
+      
+      // Rotate the scoreboard to be angled up slightly for better visibility
+      scoreBoard.rotation.x = -Math.PI / 8; // Tilt upward slightly
+      
+      // Create a background panel
+      const geometry = new THREE.PlaneGeometry(scoreBoardWidth, scoreBoardHeight);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide
+      });
+      const background = new THREE.Mesh(geometry, material);
+      scoreBoard.add(background);
+      
+      // Add methods to update the score
+      scoreBoard.updateScore = function(newScore, timeLeft, multiplier) {
+        // Update or create score text
+        if (this.scoreText) {
+          this.remove(this.scoreText);
+        }
+        
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = 512;
+        canvas.height = 128;
+        
+        context.fillStyle = 'rgba(0, 0, 0, 0)';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        context.font = 'bold 28px Arial';
+        context.fillStyle = 'white';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        
+        let textContent = `Score: ${newScore}`;
+        if (multiplier > 1) {
+          textContent += ` (x${multiplier})`;
+        }
+        
+        context.fillText(textContent, canvas.width / 2, 40);
+        
+        if (timeLeft !== undefined) {
+          // Format time as MM:SS
+          const minutes = Math.floor(timeLeft / 60);
+          const seconds = Math.floor(timeLeft % 60);
+          const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+          
+          context.fillText(`Time: ${formattedTime}`, canvas.width / 2, 80);
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity: 1
+        });
+        
+        const geometry = new THREE.PlaneGeometry(scoreBoardWidth * 0.9, scoreBoardHeight * 0.8);
+        this.scoreText = new THREE.Mesh(geometry, material);
+        this.scoreText.position.z = 0.01;
+        this.add(this.scoreText);
+      };
+      
+      log('Scoreboard created');
+    }
+    
+    // Initialize sound pool
+    function initSoundPool() {
+      // Create audio elements for each sound type
+      const sounds = ['fire', 'hit', 'explosion', 'powerUp', 'pop', 'miss', 'gameOver'];
+      
+      sounds.forEach(soundType => {
+        soundPool[soundType] = [];
+        
+        // Create multiple instances for each sound
+        for (let i = 0; i < 3; i++) {
+          const sound = new Audio();
+          sound.volume = 0.5;
+          
+          // Set source based on sound type (URLs would be actual audio files in a real implementation)
+          // Here we're using the Web Audio API to generate simple sounds
+          sound.addEventListener('play', () => {
+            generateSound(soundType, sound);
+          });
+          
+          soundPool[soundType].push(sound);
+        }
+      });
+    }
+    
+    // Generate simple sounds using Web Audio API
+    function generateSound(type, audioElement) {
+      if (!soundEnabled || !audioElement) return;
+      
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const gainNode = audioContext.createGain();
+      gainNode.connect(audioContext.destination);
+      
+      const oscillator = audioContext.createOscillator();
+      oscillator.connect(gainNode);
+      
+      // Configure sound based on type
+      switch (type) {
+        case 'fire':
+          oscillator.type = 'triangle';
+          oscillator.frequency.value = 440;
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+          oscillator.start();
+          oscillator.stop(audioContext.currentTime + 0.2);
+          break;
+          
+        case 'hit':
+          oscillator.type = 'square';
+          oscillator.frequency.value = 300;
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+          oscillator.start();
+          oscillator.stop(audioContext.currentTime + 0.2);
+          break;
+          
+        case 'explosion':
+          oscillator.type = 'sawtooth';
+          oscillator.frequency.value = 100;
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+          oscillator.start();
+          oscillator.stop(audioContext.currentTime + 0.3);
+          break;
+          
+        case 'powerUp':
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.2);
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+          oscillator.start();
+          oscillator.stop(audioContext.currentTime + 0.3);
+          break;
+          
+        case 'pop':
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.1);
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+          oscillator.start();
+          oscillator.stop(audioContext.currentTime + 0.2);
+          break;
+          
+        case 'miss':
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.2);
+          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+          oscillator.start();
+          oscillator.stop(audioContext.currentTime + 0.2);
+          break;
+          
+        case 'gameOver':
+          oscillator.type = 'triangle';
+          oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.5);
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+          oscillator.start();
+          oscillator.stop(audioContext.currentTime + 0.5);
+          break;
+      }
+      
+      // Clean up the audio context when done
+      oscillator.onended = () => {
+        audioContext.close();
+      };
+    }
+    
+    // Play a sound
+    function createSound(type) {
+      if (!soundEnabled || !soundPool[type]) return;
+      
+      // Find an audio element that's not currently playing
+      for (const sound of soundPool[type]) {
+        if (sound.paused || sound.ended) {
+          sound.currentTime = 0;
+          sound.play().catch(e => log(`Error playing sound: ${e}`));
+          return;
+        }
+      }
+      
+      // If all are playing, use the first one
+      if (soundPool[type].length > 0) {
+        const sound = soundPool[type][0];
+        sound.currentTime = 0;
+        sound.play().catch(e => log(`Error playing sound: ${e}`));
+      }
+    }
+    
+    // Trigger haptic feedback on controller
+    function triggerHapticFeedback(controller) {
+      if (!hapticFeedbackEnabled || !controller || !controller.gamepad) return;
+      
+      try {
+        const gamepad = controller.gamepad;
+        if (gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
+          gamepad.hapticActuators[0].pulse(0.8, 100);
+        }
+      } catch (error) {
+        log(`Haptic feedback error: ${error.message}`);
+      }
+    }
+    
+    // Start the game with the selected mode
+    function startGame(gameMode) {
+      log(`Starting game in ${gameMode} mode`);
+      
+      // Set game mode
+      currentGameMode = gameMode;
+      currentDifficulty = { ...DIFFICULTY_LEVELS[0] };
+      
+      // Reset game state
+      score = 0;
+      scoreMultiplier = 1;
+      speedMultiplier = 1;
+      moles = [];
+      projectiles = [];
+      powerUps = [];
+      activePowerUps = {};
+      
+      // Clear any existing timers
+      if (gameTimer) clearInterval(gameTimer);
+      
+      // Set time based on game mode
+      timeRemaining = GAME_MODES[gameMode].timeLimit ? GAME_MODES[gameMode].timeLimit / 1000 : 0;
+      
+      // Hide menu
+      if (menuBoard) {
+        menuBoard.visible = false;
+      }
+      
+      // Show scoreboard
+      if (scoreBoard) {
+        scoreBoard.visible = true;
+        scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
+        
+        // Position scoreboard at floor level
+        const playerPosition = new THREE.Vector3();
+        camera.getWorldPosition(playerPosition);
+        
+        // Force a very specific position - directly in front of player, just above floor
+        scoreBoard.position.set(
+          playerPosition.x,  // Same x as player
+          floorY + 0.4,      // Just 0.4 meters above floor - very low
+          playerPosition.z - 1.2  // Slightly closer to player
+        );
+        
+        // Tilt it up to be visible
+        scoreBoard.rotation.set(-Math.PI/4, 0, 0);
+        
+        log(`Positioned scoreboard at y=${scoreBoard.position.y}, floor=${floorY}`);
+      }
+      
+      // Start game logic
+      gameActive = true;
+      
+      // Start spawning moles
+      spawnMoles();
+      
+      // Start spawning power-ups
+      spawnPowerUps();
+      
+      // Start game timer based on mode
+      if (GAME_MODES[gameMode].timeLimit) {
+        gameTimer = setInterval(() => {
+          timeRemaining -= 0.1; // Update every 100ms
+          
+          // Check if game over
+          if (timeRemaining <= 0) {
+            endGame();
+            return;
+          }
+          
+          // Update scoreboard
+          if (scoreBoard) {
+            scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
+          }
+        }, 100);
+      }
+      
+      // Start increasing difficulty over time
+      if (GAME_MODES[gameMode].difficultyIncrease) {
+        const difficultyInterval = setInterval(() => {
+          if (!gameActive) {
+            clearInterval(difficultyInterval);
+            return;
+          }
+          
+          // Move to next difficulty level if available
+          const nextLevel = currentDifficulty.level;
+          if (nextLevel < DIFFICULTY_LEVELS.length) {
+            currentDifficulty = { ...DIFFICULTY_LEVELS[nextLevel] };
+            log(`Increased difficulty to level ${currentDifficulty.level}`);
+          }
+        }, GAME_MODES[gameMode].difficultyIncrease);
+      }
+    }
+    
+    // End the game
+    function endGame() {
+      log('Game ended');
+      
+      gameActive = false;
+      
+      // Clear any timers
+      if (gameTimer) clearInterval(gameTimer);
+      
+      // Clear all game objects
+      clearGameObjects();
+      
+      // Play game over sound
+      createSound('gameOver');
+      
+      // Show game over screen
+      showGameOverScreen();
+    }
+    
+    // Clear all game objects
+    function clearGameObjects() {
+      // Remove all moles
+      moles.forEach(mole => {
+        if (mole.object) scene.remove(mole.object);
+      });
+      moles = [];
+      
+      // Remove all projectiles
+      projectiles.forEach(projectile => {
+        if (projectile.object) scene.remove(projectile.object);
+      });
+      projectiles = [];
+      
+      // Remove all power-ups
+      powerUps.forEach(powerUp => {
+        if (powerUp.object) scene.remove(powerUp.object);
+      });
+      powerUps = [];
+      
+      // Remove all explosions
+      explosions.forEach(explosion => {
+        if (explosion.object) scene.remove(explosion.object);
+      });
+      explosions = [];
+    }
+    
+    // Show game over screen
+    function showGameOverScreen() {
+      log('Showing game over screen');
+      
+      // Hide scoreboard
+      if (scoreBoard) {
+        scoreBoard.visible = false;
+      }
+      
+      // Create game over popup
+      const gameOverScreen = new THREE.Group();
+      gameOverScreen.name = 'gameOverScreen';
+      
+      // Position in front of player
+      const cameraPos = new THREE.Vector3();
+      camera.getWorldPosition(cameraPos);
+      gameOverScreen.position.set(cameraPos.x, floorY + 1.2, cameraPos.z - 1);
+      
+      // Make it face the player
+      gameOverScreen.lookAt(cameraPos.x, gameOverScreen.position.y, cameraPos.z);
+      
+      // Create a background panel
+      const panelGeometry = new THREE.PlaneGeometry(0.5, 0.6);
+      const panelMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+      });
+      const panel = new THREE.Mesh(panelGeometry, panelMaterial);
+      gameOverScreen.add(panel);
+      
+      // Create text
+      createMenuText('Game Over', 0, 0.2, 0.04, gameOverScreen);
+      createMenuText(`Score: ${score}`, 0, 0.1, 0.03, gameOverScreen);
+      
+      // Create restart button
+      const restartButton = createMenuButton('Play Again', 0, -0.1, 0.3, 0.08, () => {
+        scene.remove(gameOverScreen);
+        
+        // Show menu
+        if (menuBoard) {
+          menuBoard.visible = true;
+          updateMenuPosition();
+        }
+      });
+      gameOverScreen.add(restartButton);
+      
+      scene.add(gameOverScreen);
+    }
+    
+    // Spawn moles at random positions
+    function spawnMoles() {
+      if (!gameActive) return;
+      
+      // If current mole count is less than target, spawn more
+      const targetMoleCount = currentDifficulty.moleCount;
+      const spawnCount = Math.max(0, targetMoleCount - moles.length);
+      
+      for (let i = 0; i < spawnCount; i++) {
+        // Find a position that doesn't overlap with existing moles
+        let position;
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        do {
+          // Random position within spawn radius
+          const radius = getRandomFloat(GAME_CONFIG.mole.minDistance, GAME_CONFIG.mole.spawnRadius);
+          const angle = getRandomFloat(0, Math.PI * 2);
+          const x = radius * Math.cos(angle);
+          const z = radius * Math.sin(angle);
+          
+          position = { x, y: floorY, z };
+          attempts++;
+          
+          // Check if too close to any existing mole
+          const tooClose = moles.some(mole => {
+            const dist = Math.sqrt(
+              Math.pow(position.x - mole.object.position.x, 2) +
+              Math.pow(position.z - mole.object.position.z, 2)
+            );
+            return dist < 0.5; // Minimum distance between moles
+          });
+          
+          if (!tooClose) break;
+        } while (attempts < maxAttempts);
+        
+        // If we found a good position, create a mole
+        if (attempts < maxAttempts) {
+          createMole(position.x, position.y, position.z);
+        }
+      }
+      
+      // Schedule next spawn
+      const baseInterval = GAME_MODES[currentGameMode].spawnInterval;
+      const interval = baseInterval * currentDifficulty.spawnInterval;
+      const adjustedInterval = activePowerUps.timeSlow ? interval * 1.5 : interval;
+      
+      setTimeout(spawnMoles, adjustedInterval);
+    }
+    
+    // Create a mole at the given position
+    function createMole(x, y, z) {
+      // Select mole type
+      const selectedType = getRandomItem(MOLE_TYPES, 'probability');
+      
+      // Clone the mole model
+      const moleModel = models[selectedType.id].object.clone();
+      
+      // Set scale
+      moleModel.scale.set(selectedType.scale, selectedType.scale, selectedType.scale);
+      
+      // Position - START COMPLETELY UNDER THE FLOOR
+      moleModel.position.set(x, y - 0.5, z);  // Fully below floor
+      scene.add(moleModel);
+      
+      // Create mole object
+      const mole = {
+        object: moleModel,
+        type: selectedType,
+        state: 'down',
+        
+        riseUp: function() {
+          if (this.state !== 'down' || !gameActive) return;
+          
+          this.state = 'rising';
+          const startY = y - 0.5;             // Under floor
+          const targetY = y + 0.4;            // HIGHER above floor (0.4m)
+          const startTime = Date.now();
+          const duration = 500 / (this.type.speed * speedMultiplier);
+          
+          createSound('pop');
+          
+          log(`Mole rising from ${startY} to ${targetY}, floor=${y}`);
+          
+          const animate = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            moleModel.position.y = startY + (targetY - startY) * progress;
+            
+            if (progress < 1 && this.state === 'rising') {
+              requestAnimationFrame(animate);
+            } else {
+              this.state = 'up';
+              
+              // Schedule going down
+              setTimeout(() => this.goDown(), currentDifficulty.moleLifetime / (this.type.speed * speedMultiplier));
+            }
+          };
+          
+          animate();
+        },
+        
+        goDown: function() {
+          if ((this.state !== 'up' && this.state !== 'hit') || !gameActive) return;
+          
+          this.state = 'lowering';
+          const startY = moleModel.position.y;  // Current position (might be above floor)
+          const targetY = y - 0.5;              // End position (below floor)
+          const startTime = Date.now();
+          const duration = 500 / (this.type.speed * speedMultiplier);
+          
+          // Play miss sound if in endless mode and mole wasn't hit
+          if (currentGameMode === 'endless' && this.state !== 'hit') {
+            createSound('miss');
+            currentDifficulty.misses++;
+            
+            if (currentDifficulty.misses >= GAME_MODES.endless.missesAllowed) {
+              endGame();
+              return;
+            }
+          }
+          
+          const animate = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            moleModel.position.y = startY + (targetY - startY) * progress;
+            
+            if (progress < 1 && this.state === 'lowering') {
+              requestAnimationFrame(animate);
+            } else {
+              this.state = 'down';
+              
+              // Remove the mole
+              const index = moles.indexOf(this);
+              if (index > -1) {
+                moles.splice(index, 1);
+                scene.remove(moleModel);
+              }
+            }
+          };
+          
+          animate();
+        }
+      };
+      
+      // Add to moles array
+      moles.push(mole);
+      
+      // Start rising
+      mole.riseUp();
+      
+      return mole;
+    }
+    
+    // Spawn power-ups periodically
+    function spawnPowerUps() {
+      if (!gameActive) return;
+      
+      // Only spawn if no active power-up on screen
+      if (powerUps.length === 0) {
+        // Random position within spawn radius
+        const radius = getRandomFloat(GAME_CONFIG.mole.minDistance, GAME_CONFIG.powerUp.spawnRadius);
+        const angle = getRandomFloat(0, Math.PI * 2);
+        const x = radius * Math.cos(angle);
+        const z = radius * Math.sin(angle);
+        
+        createPowerUp(x, floorY, z);
+      }
+      
+      // Schedule next spawn
+      setTimeout(spawnPowerUps, GAME_MODES[currentGameMode].powerUpSpawnInterval);
+    }
+    
+    // Create a power-up at the given position
+    function createPowerUp(x, y, z) {
+      // Select power-up type
+      const selectedType = getRandomItem(GAME_CONFIG.powerUp.types);
+      
+      // Clone the power-up model
+      const powerUpModel = models.powerUp.object.clone();
+      
+      // Set material color based on power-up type
+      powerUpModel.material = powerUpModel.material.clone();
+      powerUpModel.material.color.set(selectedType.color);
+      powerUpModel.material.emissive.set(selectedType.color);
+      
+      // Position above floor
+      powerUpModel.position.set(x, y + 0.5, z);
+      scene.add(powerUpModel);
+      
+      // Create power-up object
+      const powerUp = {
+        object: powerUpModel,
+        type: selectedType,
+        active: true,
+        createdAt: Date.now()
+      };
+      
+      // Add to power-ups array
+      powerUps.push(powerUp);
+      
+      // Set timeout to remove if not collected
+      setTimeout(() => {
+        if (powerUps.includes(powerUp)) {
+          const index = powerUps.indexOf(powerUp);
+          if (index > -1) {
+            powerUps.splice(index, 1);
+            scene.remove(powerUpModel);
+          }
+        }
+      }, GAME_CONFIG.powerUp.lifetime);
+      
+      // Start floating animation
+      animatePowerUp(powerUp);
+      
+      return powerUp;
+    }
+    
+    // Animate a power-up (floating and rotating)
+    function animatePowerUp(powerUp) {
+      if (!powerUp || !powerUp.active || !gameActive) return;
+      
+      const { object, createdAt } = powerUp;
+      const now = Date.now();
+      const elapsed = now - createdAt;
+      
+      // Floating movement
+      object.position.y = powerUp.object.position.y + 0.05 * Math.sin(elapsed * 0.003);
+      
+      // Rotating movement
+      object.rotation.y = elapsed * 0.002;
+      object.rotation.x = elapsed * 0.001;
+      
+      // Continue animation if still active
+      if (powerUp.active && gameActive) {
+        requestAnimationFrame(() => animatePowerUp(powerUp));
+      }
+    }
+    
+    // Activate a power-up
+    function activatePowerUp(powerUp) {
+      if (!powerUp || !powerUp.active) return;
+      
+      const { type } = powerUp;
+      log(`Activating power-up: ${type.id}`);
+      
+      // Mark as inactive and remove from scene
+      powerUp.active = false;
+      scene.remove(powerUp.object);
+      
+      // Remove from array
+      const index = powerUps.indexOf(powerUp);
+      if (index > -1) {
+        powerUps.splice(index, 1);
+      }
+      
+      // Apply power-up effect
+      switch (type.id) {
+        case 'rapidFire':
+          activePowerUps.rapidFire = true;
+          break;
+          
+        case 'doublePoints':
+          scoreMultiplier = 2;
+          break;
+          
+        case 'timeSlow':
+          activePowerUps.timeSlow = true;
+          speedMultiplier = 0.5;
+          break;
+      }
+      
+      // Create floating notification
+      showFloatingText(`${type.name} activated!`, 0, 1.5, -1, 0x00FFFF);
+      
+      // Update scoreboard
+      if (scoreBoard) {
+        scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
+      }
+      
+      // Set timeout to deactivate
+      setTimeout(() => {
+        log(`Power-up expired: ${type.id}`);
+        
+        // Remove effect
+        switch (type.id) {
+          case 'rapidFire':
+            activePowerUps.rapidFire = false;
+            break;
+            
+          case 'doublePoints':
+            scoreMultiplier = 1;
+            break;
+            
+          case 'timeSlow':
+            activePowerUps.timeSlow = false;
+            speedMultiplier = 1;
+            break;
+        }
+        
+        // Update scoreboard
+        if (scoreBoard && gameActive) {
+          scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
+        }
+      }, type.duration);
+    }
+    
+    // Fire a projectile from controller
+    function fireProjectile(fromController) {
+      const now = Date.now();
+      const cooldown = activePowerUps.rapidFire ? 
+                      GAME_CONFIG.projectile.cooldown / 2 : 
+                      GAME_CONFIG.projectile.cooldown;
+                      
+      if (now - lastFireTime < cooldown) {
+        return; // Still in cooldown
+      }
+      
+      lastFireTime = now;
+      
+      // Create projectile visual
+      const projectile = models.projectile.object.clone();
+      scene.add(projectile);
+      
+      // Set up raycaster from controller
+      raycaster.ray.origin.setFromMatrixPosition(fromController.matrixWorld);
+      tempMatrix.identity().extractRotation(fromController.matrixWorld);
+      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+      
+      // Animate the projectile
+      const startPos = raycaster.ray.origin.clone();
+      const velocity = raycaster.ray.direction.clone().multiplyScalar(GAME_CONFIG.projectile.speed);
+      const startTime = now;
+      
+      // Store info to check for collisions
+      const projectileInfo = {
+        object: projectile,
+        ray: raycaster.ray.clone(),
+        createdAt: now
+      };
+      
+      // Projectile animation and collision detection in one function
+      const animateProjectile = () => {
+        const elapsed = (Date.now() - startTime) / 1000; // seconds
+        const distance = GAME_CONFIG.projectile.speed * elapsed;
+        
+        // Update projectile position
+        projectile.position.copy(startPos).add(velocity.clone().multiplyScalar(elapsed));
+        
+        // DIRECT HIT TESTING - check all moles to see if we hit any
+        let hit = false;
+        moles.forEach(mole => {
+          if (mole.state === 'up' || mole.state === 'rising') {
+            // Get distance from projectile to mole
+            const molePos = mole.object.position.clone();
+            const dist = projectile.position.distanceTo(molePos);
+            
+            // If close enough, it's a hit
+            if (dist < 0.4) { // Generous hit radius
+              hit = true;
+              log(`HIT MOLE at distance ${dist.toFixed(2)}`);
+              
+              // Create explosion effect
+              createExplosion(molePos.x, molePos.y, molePos.z);
+              
+              // Play sound and haptic feedback
+              createSound('hit');
+              createSound('explosion');
+              triggerHapticFeedback(fromController);
+              
+              // Update score
+              const points = mole.type.points;
+              updateScore(points);
+              showFloatingPoints(molePos.x, molePos.y, molePos.z, points);
+              
+              // Add time in time attack mode
+              if (currentGameMode === 'timeAttack' && GAME_MODES.timeAttack) {
+                const timeBonus = GAME_MODES.timeAttack.timeBonus;
+                timeRemaining += timeBonus;
+                if (scoreBoard) scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
+                showFloatingTime(molePos.x, molePos.y, molePos.z, timeBonus);
+              }
+              
+              // Force the mole to go down
+              mole.state = 'hit';
+              mole.object.traverse(child => {
+                if (child.isMesh && child.material) {
+                  child.material.emissive = new THREE.Color(0xFF0000);
+                }
+              });
+              mole.goDown();
+              
+              // Remove projectile
+              scene.remove(projectile);
+            }
+          }
+        });
+        
+        // Also check for power-up hits (simplified)
+        if (!hit) {
+          powerUps.forEach(powerUp => {
+            if (powerUp.active) {
+              const powerUpPos = powerUp.object.position.clone();
+              const dist = projectile.position.distanceTo(powerUpPos);
+              
+              if (dist < 0.4) {
+                hit = true;
+                activatePowerUp(powerUp);
+                triggerHapticFeedback(fromController);
+                createSound('powerUp');
+                
+                // Remove projectile
+                scene.remove(projectile);
+              }
+            }
+          });
+        }
+        
+        // Continue animation if projectile still exists and hasn't hit anything
+        if (!hit && Date.now() - startTime < GAME_CONFIG.projectile.lifetime) {
+          requestAnimationFrame(animateProjectile);
+        } else {
+          // Remove projectile at end of lifetime
+          if (!hit) {
+            scene.remove(projectile);
+          }
+        }
+      };
+      
+      // Start animation
+      animateProjectile();
+      
+      // Play sound
+      createSound('fire');
+      
+      // Trigger haptic feedback
+      triggerHapticFeedback(fromController);
+      
+      return projectileInfo;
+    }
+    
+    // Update score
+    function updateScore(points) {
+      const adjustedPoints = points * scoreMultiplier;
+      score += adjustedPoints;
+      
+      if (scoreBoard) {
+        scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
+      }
+    }
+    
+    // Show floating points text
+    function showFloatingPoints(x, y, z, points) {
+      const adjustedPoints = points * scoreMultiplier;
+      const text = `+${adjustedPoints}`;
+      showFloatingText(text, x, y, z, 0xFFFF00);
+    }
+    
+    // Show floating time text
+    function showFloatingTime(x, y, z, seconds) {
+      const text = `+${seconds}s`;
+      showFloatingText(text, x, y, z, 0x00FF00);
+    }
+    
+    // Show floating text
+    function showFloatingText(text, x, y, z, color = 0xFFFFFF) {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = 256;
+      canvas.height = 128;
+      
+      context.fillStyle = 'rgba(0, 0, 0, 0)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      
+      context.font = 'bold 48px Arial';
+      context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+      context.strokeStyle = '#000000';
+      context.lineWidth = 4;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.strokeText(text, canvas.width / 2, canvas.height / 2);
+      context.fillText(text, canvas.width / 2, canvas.height / 2);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 1,
+        side: THREE.DoubleSide
+      });
+      
+      const geometry = new THREE.PlaneGeometry(0.5, 0.25);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, y + 0.5, z);
+      scene.add(mesh);
+      
+      // Make it face the camera
+      mesh.lookAt(camera.position);
+      
+      // Animate floating up and fading out
+      const startY = mesh.position.y;
+      const startTime = Date.now();
+      const duration = 1000;
+      
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        mesh.position.y = startY + progress * 0.5;
+        material.opacity = 1 - progress;
+        
+        // Update orientation to face camera
+        mesh.lookAt(camera.position);
+        
+        if (progress < 1 && gameActive) {
+          requestAnimationFrame(animate);
+        } else {
+          scene.remove(mesh);
+        }
+      };
+      
+      animate();
+    }
+    
+    // Create explosion effect
+    function createExplosion(x, y, z) {
+      // Create a group for the explosion
+      const explosionGroup = new THREE.Group();
+      explosionGroup.position.set(x, y, z);
+      scene.add(explosionGroup);
+      
+      // Create a burst of particles
+      const particleCount = 10;
+      const particles = [];
+      
+      for (let i = 0; i < particleCount; i++) {
+        const particle = new THREE.Mesh(
+          new THREE.SphereGeometry(0.03, 8, 8),
+          new THREE.MeshBasicMaterial({ 
+            color: 0xFF5000, 
+            emissive: 0xFF5000,
+            emissiveIntensity: 1
+          })
+        );
+        
+        // Start at explosion center
+        particle.position.set(0, 0, 0);
+        
+        // Random velocity direction
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        const velocity = {
+          x: Math.sin(phi) * Math.cos(theta) * 3.0,
+          y: Math.sin(phi) * Math.sin(theta) * 3.0,
+          z: Math.cos(phi) * 3.0
+        };
+        
+        particle.userData = { velocity };
+        explosionGroup.add(particle);
+        particles.push(particle);
+      }
+      
+      // Create a flash at the center
+      const flash = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 16, 16),
+        new THREE.MeshBasicMaterial({ 
+          color: 0xFFFFFF, 
+          transparent: true, 
+          opacity: 1 
+        })
+      );
+      explosionGroup.add(flash);
+      
+      // Animate the explosion
+      const startTime = Date.now();
+      const duration = 500;
+      
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Update particles
+        particles.forEach(particle => {
+          const { velocity } = particle.userData;
+          particle.position.x += velocity.x * 0.01;
+          particle.position.y += velocity.y * 0.01;
+          particle.position.z += velocity.z * 0.01;
+          particle.scale.multiplyScalar(0.95);
+        });
+        
+        // Update flash
+        flash.scale.set(1 + progress * 2, 1 + progress * 2, 1 + progress * 2);
+        flash.material.opacity = 1 - progress;
+        
+        if (progress < 1 && gameActive) {
+          requestAnimationFrame(animate);
+        } else {
+          scene.remove(explosionGroup);
+          
+          // Remove from array of explosions
+          const index = explosions.indexOf(explosionGroup);
+          if (index > -1) {
+            explosions.splice(index, 1);
+          }
+        }
+      };
+      
+      // Start animation
+      animate();
+      
+      // Add to explosions array
+      explosions.push(explosionGroup);
+      
+      return explosionGroup;
+    }
+    
+    // Main rendering function
+    function render(timestamp, frame) {
+      if (frame && xrSession) {
+        // Get hit test results
+        const referenceSpace = xrReferenceSpace;
+        const session = xrSession;
+        
+        if (hitTestSource && referenceSpace) {
+          const hitTestResults = frame.getHitTestResults(hitTestSource);
+          
+          if (hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(referenceSpace);
+            
+            if (pose) {
+              // Update reticle position
+              if (floorReticle) {
+                floorReticle.visible = true;
+                floorReticle.position.set(
+                  pose.transform.position.x,
+                  pose.transform.position.y,
+                  pose.transform.position.z
+                );
+                floorReticle.quaternion.set(
+                  pose.transform.orientation.x,
+                  pose.transform.orientation.y,
+                  pose.transform.orientation.z,
+                  pose.transform.orientation.w
+                );
+              }
+            }
+          } else {
+            if (floorReticle) floorReticle.visible = false;
+          }
+        }
+        
+        // Get viewer pose
+        const viewerPose = frame.getViewerPose(referenceSpace);
+        if (viewerPose) {
+          // Update menu position
+          updateMenuPosition();
+        }
+      }
+      
+      // Render the scene
       renderer.render(scene, camera);
     }
     
-    // Initialize the application
-    init();
+    // Start the app when the page loads
+    window.addEventListener('load', init);
   </script>
 </body>
 </html>
