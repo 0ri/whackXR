@@ -159,7 +159,7 @@
     <div id="start-screen" class="center">
       <h1 id="game-title">WebXR Mole Shooter</h1>
       <div id="ar-button" class="button">Start AR</div>
-      <div id="version-info">Version 1.0.7</div>
+      <div id="version-info">Version 1.0.8</div>
     </div>
   </div>
   <div id="loading-screen">
@@ -171,12 +171,18 @@
   </div>
   <div id="debug-panel"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script type="module">
+    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/DRACOLoader.js';
+    
+    // Add the imported classes to global scope so they can be accessed in the inline script
+    window.GLTFLoader = GLTFLoader;
+    window.DRACOLoader = DRACOLoader;
+  </script>
   <script>
     // GAME VERSION
-    const GAME_VERSION = '1.0.7';
+    const GAME_VERSION = '1.0.8';
     
     // DEBUG FLAG - Set to true for debug output
     const DEBUG = false;
@@ -621,8 +627,42 @@
         placeFloor(floorReticle.position.y);
         // Hide the reticle after floor placement
         floorReticle.visible = false;
-        // Start the game
-        startGame();
+        // Don't start game automatically - just show menu
+        // Menu interaction will handle game start with proper game mode
+      } else if (gameActive === false && menuBoard && menuBoard.visible) {
+        // Check for menu button interactions
+        const controller = event.target;
+        
+        // Set up raycaster from controller
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        tempMatrix.identity().extractRotation(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+        
+        // Get intersections with menu buttons
+        const menuButtons = [];
+        menuBoard.traverse(child => {
+          if (child.userData && child.userData.onClick) {
+            menuButtons.push(child);
+          }
+        });
+        
+        const intersects = raycaster.intersectObjects(menuButtons, true);
+        if (intersects.length > 0) {
+          // Find the actual button object (might be a child mesh that was intersected)
+          let selectedButton = intersects[0].object;
+          while (selectedButton && !selectedButton.userData.onClick) {
+            selectedButton = selectedButton.parent;
+          }
+          
+          if (selectedButton && selectedButton.userData.onClick) {
+            // Call the stored click handler
+            selectedButton.userData.onClick();
+            
+            // Provide feedback
+            triggerHapticFeedback(controller);
+            createSound('hit');
+          }
+        }
       }
     }
     
@@ -635,10 +675,10 @@
       const progressBar = document.getElementById('progress');
       
       // Set up loaders
-      const dracoLoader = new THREE.DRACOLoader();
+      const dracoLoader = new DRACOLoader();
       dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
       
-      const gltfLoader = new THREE.GLTFLoader();
+      const gltfLoader = new GLTFLoader();
       gltfLoader.setDRACOLoader(dracoLoader);
       
       // Create a simple mole model
@@ -1701,6 +1741,9 @@
         createdAt: now
       };
       
+      // Add to projectiles array for tracking
+      projectiles.push(projectileInfo);
+      
       // Projectile animation and collision detection in one function
       const animateProjectile = () => {
         const elapsed = (Date.now() - startTime) / 1000; // seconds
@@ -1752,8 +1795,14 @@
               });
               mole.goDown();
               
-              // Remove projectile
+              // Remove projectile from scene
               scene.remove(projectile);
+              
+              // Remove from projectiles array
+              const projectileIndex = projectiles.findIndex(p => p.object === projectile);
+              if (projectileIndex > -1) {
+                projectiles.splice(projectileIndex, 1);
+              }
             }
           }
         });
@@ -1771,8 +1820,14 @@
                 triggerHapticFeedback(fromController);
                 createSound('powerUp');
                 
-                // Remove projectile
+                // Remove projectile from scene
                 scene.remove(projectile);
+                
+                // Remove from projectiles array
+                const projectileIndex = projectiles.findIndex(p => p.object === projectile);
+                if (projectileIndex > -1) {
+                  projectiles.splice(projectileIndex, 1);
+                }
               }
             }
           });
@@ -1785,6 +1840,12 @@
           // Remove projectile at end of lifetime
           if (!hit) {
             scene.remove(projectile);
+            
+            // Remove from projectiles array
+            const projectileIndex = projectiles.findIndex(p => p.object === projectile);
+            if (projectileIndex > -1) {
+              projectiles.splice(projectileIndex, 1);
+            }
           }
         }
       };
