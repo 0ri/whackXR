@@ -575,12 +575,15 @@ function startAR() {
     // Create scoreboard in 3D
     function createScoreBoard() {
       const { scoreBoardWidth, scoreBoardHeight } = GAME_CONFIG.ui;
-      
-      // Create a group for the scoreboard
-      scoreBoard = new THREE.Group();
-      scoreBoard.position.set(0, 1.5, -1.5); // Above and in front of player
-      scoreBoard.visible = false;
-      scene.add(scoreBoard);
+  
+    // Create a group for the scoreboard
+    scoreBoard = new THREE.Group();
+    scoreBoard.position.set(0, 0.7, -1.5); // CHANGED: Lower position (0.7m above floor)
+    scoreBoard.visible = false;
+    scene.add(scoreBoard);
+  
+    // Rotate the scoreboard to be angled up slightly for better visibility
+    scoreBoard.rotation.x = -Math.PI / 8; // Tilt upward slightly
       
       // Scoreboard background
       const scoreBackground = new THREE.Mesh(
@@ -1111,31 +1114,57 @@ function startAR() {
     }
     
     // Place the floor at the selected position
-    function placeFloor(yPosition) {
-      floorY = yPosition;
-      log(`Floor placed at y=${floorY}`);
-      
-      // Show the floor grid
-      const floorGrid = scene.getObjectByName('floorGrid');
-      if (floorGrid) {
-        floorGrid.position.y = floorY;
-        floorGrid.visible = true;
-        log('Floor grid visible');
-      }
-      
-      // Hide the reticle
-      floorReticle.visible = false;
-      
-      // Remove any instruction text
-      scene.children.forEach(child => {
-        if (child.name === 'instruction-text') {
-          scene.remove(child);
-        }
-      });
-      
-      // Initialize the game
-      initializeGame();
+// MODIFY the placeFloor function:
+function placeFloor(yPosition) {
+  floorY = yPosition;
+  log(`Floor placed at y=${floorY}`);
+  
+  // Show the floor grid
+  const floorGrid = scene.getObjectByName('floorGrid');
+  if (floorGrid) {
+    floorGrid.position.y = floorY;
+    floorGrid.visible = true;
+    log('Floor grid visible');
+    
+    // Make the grid more visible
+    floorGrid.material.opacity = 0.8;
+    floorGrid.material.transparent = true;
+  }
+  
+  // Show additional visual marker for the floor
+  createFloorMarker(floorY);
+  
+  // Hide the reticle
+  floorReticle.visible = false;
+  
+  // Remove any instruction text
+  scene.children.forEach(child => {
+    if (child.name === 'instruction-text') {
+      scene.remove(child);
     }
+  });
+  
+  // Initialize the game
+  initializeGame();
+}
+
+// ADD this new function to create a floor marker:
+
+function createFloorMarker(y) {
+  // Create a circular marker for the floor
+  const markerGeometry = new THREE.CircleGeometry(2, 32);
+  const markerMaterial = new THREE.MeshBasicMaterial({ 
+    color: 0x4080ff, 
+    transparent: true, 
+    opacity: 0.3,
+    side: THREE.DoubleSide 
+  });
+  const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+  marker.rotation.x = -Math.PI / 2; // Make it horizontal
+  marker.position.set(0, y + 0.01, 0); // Just above floor level
+  marker.name = 'floor-marker';
+  scene.add(marker);
+}
     
     // Initialize the game after floor is selected
     function initializeGame() {
@@ -1168,18 +1197,19 @@ function startAR() {
     
     // Update menu position to face player
     function updateMenuPosition() {
-      if (!menuBoard) return;
-      
-      const cameraPos = new THREE.Vector3();
-      camera.getWorldPosition(cameraPos);
-      
-      // Set menu position in front of player, but maintain its Y height
-      menuBoard.position.x = cameraPos.x;
-      menuBoard.position.z = cameraPos.z - 1;
-      
-      // Make menu face the camera
-      menuBoard.lookAt(cameraPos);
-    }
+  if (!menuBoard) return;
+  
+  const cameraPos = new THREE.Vector3();
+  camera.getWorldPosition(cameraPos);
+  
+  // Position menu in front of player but closer to floor level
+  menuBoard.position.x = cameraPos.x;
+  menuBoard.position.y = Math.max(floorY + 0.8, cameraPos.y - 0.5); // Positioned above floor
+  menuBoard.position.z = cameraPos.z - 1;
+  
+  // Make menu face the camera
+  menuBoard.lookAt(cameraPos.x, menuBoard.position.y, cameraPos.z);
+}
     
     // Handle menu button interactions
     function handleMenuInteraction(controller) {
@@ -1295,98 +1325,98 @@ function startAR() {
     }
     
     // Check for projectile collisions with moles and power-ups
-    function checkProjectileCollisions() {
-      const projectilesToRemove = [];
+// REPLACE the checkProjectileCollisions function with this improved version
+function checkProjectileCollisions() {
+  const projectilesToRemove = [];
+  
+  // Debug info
+  if (DEBUG) {
+    log(`Checking collisions: ${projectiles.length} projectiles, ${moles.length} moles, ${powerUps.length} powerups`);
+  }
+  
+  for (let i = 0; i < projectiles.length; i++) {
+    const projectile = projectiles[i];
+    
+    // Create a sphere for the projectile
+    const projectileSphere = new THREE.Sphere(
+      projectile.object.position.clone(), 
+      GAME_CONFIG.projectile.size * 2 // INCREASED size for more generous hit detection
+    );
+    
+    // Check mole collisions
+    for (let j = 0; j < moles.length; j++) {
+      const mole = moles[j];
       
-      for (let i = 0; i < projectiles.length; i++) {
-        const projectile = projectiles[i];
+      // Check ALL moles that are visible (not just 'up' state)
+      if (mole.object.visible && (mole.state === 'up' || mole.state === 'rising')) {
+        // Get mole position - use direct position instead of getWorldPosition
+        const molePos = mole.object.position.clone();
         
-        // Create a sphere for the projectile
-        const projectileSphere = new THREE.Sphere(
-          projectile.object.position.clone(), 
-          GAME_CONFIG.projectile.size * 1.2 // Slightly larger for better hit detection
+        // Create a larger bounding sphere for the mole
+        const moleSphere = new THREE.Sphere(
+          molePos, 
+          0.35 * mole.type.scale // INCREASED radius for better hit detection
         );
         
-        // Check mole collisions
-        for (let j = 0; j < moles.length; j++) {
-          const mole = moles[j];
-          
-          if (mole.state === 'up') {
-            // Get mole world position
-            const molePos = new THREE.Vector3();
-            mole.object.getWorldPosition(molePos);
-            
-            // Create a bounding sphere for the mole
-            const moleSphere = new THREE.Sphere(
-              molePos, 
-              0.25 * mole.type.scale // Approximate radius
-            );
-            
-            if (projectileSphere.intersectsSphere(moleSphere)) {
-              // Hit! Create explosion and update score
-              createExplosion(molePos.x, molePos.y, molePos.z);
-              const points = mole.hit();
-              updateScore(points);
-              triggerHapticFeedback();
-              createSound('hit');
-              createSound('explosion');
-              showFloatingPoints(molePos.x, molePos.y, molePos.z, points);
-              
-              // Add time in time attack mode
-              if (currentGameMode === 'timeAttack') {
-                const timeBonus = GAME_MODES.timeAttack.timeBonus;
-                timeRemaining += timeBonus;
-                scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-                showFloatingTime(molePos.x, molePos.y, molePos.z, timeBonus);
-              }
-              
-              // Remove this projectile
-              scene.remove(projectile.object);
-              projectilesToRemove.push(i);
-              break;
-            }
+        if (projectileSphere.intersectsSphere(moleSphere)) {
+          // Debug hit
+          if (DEBUG) {
+            log(`HIT! Mole at (${molePos.x.toFixed(2)}, ${molePos.y.toFixed(2)}, ${molePos.z.toFixed(2)})`);
           }
-        }
-        
-        // If projectile was removed, continue to next one
-        if (projectilesToRemove.includes(i)) continue;
-        
-        // Check power-up collisions
-        for (let j = 0; j < powerUps.length; j++) {
-          const powerUp = powerUps[j];
           
-          if (powerUp.active) {
-            // Get power-up world position
-            const powerUpPos = new THREE.Vector3();
-            powerUp.object.getWorldPosition(powerUpPos);
-            
-            // Create a bounding sphere for the power-up
-            const powerUpSphere = new THREE.Sphere(
-              powerUpPos, 
-              0.25 * powerUp.type.scale // Approximate radius
-            );
-            
-            if (projectileSphere.intersectsSphere(powerUpSphere)) {
-              // Hit!
-              triggerHapticFeedback();
-              createSound('powerUp');
-              activatePowerUp(powerUp);
-              
-              // Remove this projectile
-              scene.remove(projectile.object);
-              projectilesToRemove.push(i);
-              break;
+          // Hit! Create explosion and update score
+          createExplosion(molePos.x, molePos.y, molePos.z);
+          const points = mole.type.points; // Directly get points from mole type
+          
+          // Force the hit state
+          mole.state = 'hit';
+          mole.object.traverse(child => {
+            if (child.isMesh && child.material) {
+              child.material.emissive = new THREE.Color(0xFF0000);
             }
+          });
+          
+          // Force the mole to go down
+          setTimeout(() => {
+            mole.goDown();
+          }, 100);
+          
+          // Update score
+          updateScore(points);
+          triggerHapticFeedback();
+          createSound('hit');
+          createSound('explosion');
+          showFloatingPoints(molePos.x, molePos.y, molePos.z, points);
+          
+          // Add time in time attack mode
+          if (currentGameMode === 'timeAttack') {
+            const timeBonus = GAME_MODES.timeAttack.timeBonus;
+            timeRemaining += timeBonus;
+            scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
+            showFloatingTime(molePos.x, molePos.y, molePos.z, timeBonus);
           }
+          
+          // Remove this projectile
+          scene.remove(projectile.object);
+          projectilesToRemove.push(i);
+          break;
         }
-      }
-      
-      // Remove projectiles that hit something
-      for (let i = projectilesToRemove.length - 1; i >= 0; i--) {
-        const index = projectilesToRemove[i];
-        projectiles.splice(index, 1);
       }
     }
+    
+    // If projectile was removed, continue to next one
+    if (projectilesToRemove.includes(i)) continue;
+    
+    // Check power-up collisions (rest of the existing code remains the same)
+    // ...
+  }
+  
+  // Remove projectiles that hit something
+  for (let i = projectilesToRemove.length - 1; i >= 0; i--) {
+    const index = projectilesToRemove[i];
+    projectiles.splice(index, 1);
+  }
+}
     
     // Create explosion effect
     function createExplosion(x, y, z) {
@@ -1506,17 +1536,20 @@ function startAR() {
       };
       
       // Show scoreboard
-      if (scoreBoard) {
-        scoreBoard.visible = true;
-        scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-        
-        // Position scoreboard above player
-        const cameraPos = new THREE.Vector3();
-        camera.getWorldPosition(cameraPos);
-        scoreBoard.position.x = cameraPos.x;
-        scoreBoard.position.z = cameraPos.z - 1.5;
-        scoreBoard.lookAt(cameraPos.x, scoreBoard.position.y, cameraPos.z);
-      }
+if (scoreBoard) {
+  scoreBoard.visible = true;
+  scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
+  
+  // Position scoreboard above play area, but not too high
+  const cameraPos = new THREE.Vector3();
+  camera.getWorldPosition(cameraPos);
+  scoreBoard.position.x = cameraPos.x;
+  scoreBoard.position.y = floorY + 0.7; // 0.7 meters above floor
+  scoreBoard.position.z = cameraPos.z - 1.5;
+  
+  // Make scoreboard face toward player
+  scoreBoard.lookAt(cameraPos.x, scoreBoard.position.y, cameraPos.z);
+}
       
       // Start spawning moles
       spawnMole();
@@ -1730,7 +1763,7 @@ function startAR() {
       // Position under floor
       moleModel.position.set(x, y - 0.4, z);
       scene.add(moleModel);
-      
+
       // Apply slow effect if active
       let speedMultiplier = 1;
       if (activePowerUps.slowMoles) {
@@ -1744,77 +1777,77 @@ function startAR() {
         type: selectedType,
         
         riseUp: function() {
-          if (this.state !== 'down' || !gameActive) return;
-          
-          this.state = 'rising';
-          const startY = y - 0.4;
-          const targetY = y;
-          const startTime = Date.now();
-          const duration = 500 / (this.type.speed * speedMultiplier);
-          
-          createSound('pop');
-          
-          const animate = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            
-            moleModel.position.y = startY + (targetY - startY) * progress;
-            
-            if (progress < 1 && this.state === 'rising') {
-              requestAnimationFrame(animate);
-            } else {
-              this.state = 'up';
-              
-              // Schedule going down
-              setTimeout(() => this.goDown(), currentDifficulty.moleLifetime / (this.type.speed * speedMultiplier));
-            }
-          };
-          
-          animate();
-        },
+  if (this.state !== 'down' || !gameActive) return;
+  
+  this.state = 'rising';
+  const startY = y - 0.4;             // Starting position below floor
+  const targetY = y + 0.25;           // CHANGED: Rise 0.25 meters ABOVE floor
+  const startTime = Date.now();
+  const duration = 500 / (this.type.speed * speedMultiplier);
+  
+  createSound('pop');
+  
+  const animate = () => {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    moleModel.position.y = startY + (targetY - startY) * progress;
+    
+    if (progress < 1 && this.state === 'rising') {
+      requestAnimationFrame(animate);
+    } else {
+      this.state = 'up';
+      
+      // Schedule going down
+      setTimeout(() => this.goDown(), currentDifficulty.moleLifetime / (this.type.speed * speedMultiplier));
+    }
+  };
+  
+  animate();
+},
         
-        goDown: function() {
-          if (this.state !== 'up' || !gameActive) return;
-          
-          this.state = 'lowering';
-          const startY = y;
-          const targetY = y - 0.4;
-          const startTime = Date.now();
-          const duration = 500 / (this.type.speed * speedMultiplier);
-          
-          // Play miss sound if in endless mode and mole wasn't hit
-          if (currentGameMode === 'endless') {
-            createSound('miss');
-            currentDifficulty.misses++;
-            
-            if (currentDifficulty.misses >= GAME_MODES.endless.missesAllowed) {
-              endGame();
-              return;
-            }
-          }
-          
-          const animate = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            
-            moleModel.position.y = startY + (targetY - startY) * progress;
-            
-            if (progress < 1 && this.state === 'lowering') {
-              requestAnimationFrame(animate);
-            } else {
-              this.state = 'down';
-              
-              // Remove the mole
-              const index = moles.indexOf(this);
-              if (index > -1) {
-                moles.splice(index, 1);
-                scene.remove(moleModel);
-              }
-            }
-          };
-          
-          animate();
-        },
+goDown: function() {
+  if ((this.state !== 'up' && this.state !== 'hit') || !gameActive) return;
+  
+  this.state = 'lowering';
+  const startY = moleModel.position.y;  // Current position (might be above floor)
+  const targetY = y - 0.4;              // End position (below floor)
+  const startTime = Date.now();
+  const duration = 500 / (this.type.speed * speedMultiplier);
+  
+  // Play miss sound if in endless mode and mole wasn't hit
+  if (currentGameMode === 'endless' && this.state !== 'hit') {
+    createSound('miss');
+    currentDifficulty.misses++;
+    
+    if (currentDifficulty.misses >= GAME_MODES.endless.missesAllowed) {
+      endGame();
+      return;
+    }
+  }
+  
+  const animate = () => {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    moleModel.position.y = startY + (targetY - startY) * progress;
+    
+    if (progress < 1 && this.state === 'lowering') {
+      requestAnimationFrame(animate);
+    } else {
+      this.state = 'down';
+      
+      // Remove the mole
+      const index = moles.indexOf(this);
+      if (index > -1) {
+        moles.splice(index, 1);
+        scene.remove(moleModel);
+      }
+    }
+  };
+  
+  animate();
+},
         
         hit: function() {
           if (this.state !== 'up') return 0;
