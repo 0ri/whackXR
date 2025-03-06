@@ -206,6 +206,8 @@
     let hapticFeedbackEnabled = true;
     let explosions = [];
     let soundPool = {};
+    let floorSelected = false;
+
     
     // Game configuration
     const GAME_CONFIG = {
@@ -611,9 +613,13 @@
     
     // Handle select event (tap)
     function onSelect(event) {
-      if (floorReticle.visible) {
-        // Place the floor at the reticle position
+      if (floorReticle.visible && !gameActive) {
+        // Place the floor at the reticle position and start the game
         placeFloor(floorReticle.position.y);
+        // Hide the reticle after floor placement
+        floorReticle.visible = false;
+        // Start the game
+        startGame();
       }
     }
     
@@ -1172,6 +1178,7 @@
       projectiles = [];
       powerUps = [];
       activePowerUps = {};
+      floorSelected = false;
       
       // Clear any existing timers
       if (gameTimer) clearInterval(gameTimer);
