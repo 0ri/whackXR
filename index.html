@@ -474,37 +474,66 @@
       log('Initialization complete, ready to start AR');
     }
     
-    function startAR() {
-      log('AR button clicked, checking for WebXR support...');
+// REPLACE THE startAR() FUNCTION with this improved version
+function startAR() {
+  log('AR button clicked, checking for WebXR support...');
+  
+  if (!navigator.xr) {
+    log('ERROR: WebXR not supported on this browser');
+    alert('WebXR not supported on this browser');
+    return;
+  }
+  
+  navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+    if (supported) {
+      log('AR is supported, requesting session...');
       
-      if (!navigator.xr) {
-        log('ERROR: WebXR not supported on this browser');
-        alert('WebXR not supported on this browser');
-        return;
+      // Get the UI container element
+      const uiContainer = document.getElementById('ui-container');
+      
+      // Basic session options without DOM overlay
+      const sessionOptions = {
+        requiredFeatures: ['hit-test']
+      };
+      
+      // Add DOM overlay as optional if the UI container exists
+      if (uiContainer) {
+        sessionOptions.optionalFeatures = ['dom-overlay'];
+        sessionOptions.domOverlay = { root: uiContainer };
+        log('DOM overlay configured with ui-container');
+      } else {
+        log('WARNING: UI container not found, continuing without DOM overlay');
       }
       
-      navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-        if (supported) {
-          log('AR is supported, requesting session...');
+      navigator.xr.requestSession('immersive-ar', sessionOptions)
+        .then(onSessionStarted)
+        .catch(error => {
+          log('ERROR starting AR session: ' + error.message);
           
-          navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['hit-test'],
-            optionalFeatures: ['dom-overlay'],
-            domOverlay: { root: document.getElementById('ui-container') }
-          }).then(onSessionStarted)
-          .catch(error => {
-            log('ERROR starting AR session: ' + error.message);
+          // Try again without DOM overlay if that was the issue
+          if (error.message.includes('domOverlay') || error.message.includes('Element')) {
+            log('Trying again without DOM overlay...');
+            
+            navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['hit-test']
+            }).then(onSessionStarted)
+            .catch(finalError => {
+              log('FINAL ERROR: ' + finalError.message);
+              alert('Failed to start AR: ' + finalError.message);
+            });
+          } else {
             alert('Failed to start AR: ' + error.message);
-          });
-        } else {
-          log('ERROR: AR not supported on this device');
-          alert('AR not supported on this device');
-        }
-      }).catch(error => {
-        log('ERROR checking AR support: ' + error.message);
-        alert('Error checking AR support: ' + error.message);
-      });
+          }
+        });
+    } else {
+      log('ERROR: AR not supported on this device');
+      alert('AR not supported on this device');
     }
+  }).catch(error => {
+    log('ERROR checking AR support: ' + error.message);
+    alert('Error checking AR support: ' + error.message);
+  });
+}
     
     function updateProgressBar(percent) {
       document.getElementById('progress-bar').style.width = `${percent}%`;
