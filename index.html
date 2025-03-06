@@ -159,13 +159,13 @@
     <div id="start-screen" class="center">
       <h1 id="game-title">WebXR Mole Shooter</h1>
       <div id="ar-button" class="button">Start AR</div>
-      <div id="version-info">Version 1.0.6</div>
+      <div id="version-info">Version 1.0.31</div>
     </div>
   </div>
   <div id="loading-screen">
     <h2>Loading Game Assets</h2>
     <div class="progress-bar">
-      <div id="progress" class="progress"></div>
+      <div class="progress"></div>
     </div>
     <div id="loading-text">Loading models: 0/5</div>
   </div>
@@ -175,11 +175,40 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
   <script>
+    // Wait for all libraries to load
+    let initializationAttempts = 0;
+    const MAX_INIT_ATTEMPTS = 50; // 10 seconds maximum wait time
+    
+    function checkAndInitialize() {
+      initializationAttempts++;
+      if (window.THREE && window.THREE.GLTFLoader && window.THREE.DRACOLoader) {
+        log('All required libraries loaded');
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', init);
+        } else {
+          init();
+        }
+      } else {
+        if (initializationAttempts >= MAX_INIT_ATTEMPTS) {
+          log('ERROR: Failed to load required libraries after maximum attempts');
+          alert('Failed to load game libraries. Please refresh the page.');
+          return;
+        }
+        log('Waiting for libraries to load... (attempt ' + initializationAttempts + ')');
+        setTimeout(checkAndInitialize, 200);
+      }
+    }
+    // Ensure initialization happens after both DOM and scripts are loaded
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setTimeout(checkAndInitialize, 100));
+    } else {
+      setTimeout(checkAndInitialize, 100);
+    }
     // GAME VERSION
-    const GAME_VERSION = '1.0.6';
+    const GAME_VERSION = '1.0.31';
     
     // DEBUG FLAG - Set to true for debug output
-    const DEBUG = false;
+    const DEBUG = true;
     
     // Global variables
     let container, scene, camera, renderer, controller1, controller2;
@@ -321,7 +350,8 @@
     // Utility functions
     function log(message) {
       if (DEBUG) {
-        console.log(message);
+        const timestamp = new Date().toISOString().split('T')[1].slice(0,-1);
+        console.log(`[${timestamp}] ${message}`);
         const debugPanel = document.getElementById('debug-panel');
         if (debugPanel) {
           debugPanel.style.display = 'block';
@@ -368,15 +398,60 @@
     }
     
     // Initialize the application
-    function init() {
-      log('Initializing application');
+    async function init() {
+      try {
+        log('Starting initialization...');
+        
+        // Check for THREE.js and container first
+        if (!window.THREE) {
+          throw new Error('THREE.js not loaded');
+        }
+        
+        container = document.getElementById('container');
+        if (!container) {
+          throw new Error('Container element not found');
+        }
+        
+        // Initialize core components in order
+        renderer = new THREE.WebGLRenderer({
+          antialias: true,
+          alpha: true,
+          logarithmicDepthBuffer: true
+        });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true;
+        container = document.getElementById('container');
+        container.appendChild(renderer.domElement);
+        log('Renderer initialized');
+        
+        // Set up camera next
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+        camera.position.set(0, 1.6, 3);
+        log('Camera initialized');
+        if (!window.THREE) {
+          throw new Error('THREE.js not loaded');
+        }
+        
+        log('Initializing game...');
+        log('Initializing application');
       
       // Set up THREE.js scene
-      container = document.getElementById('container');
       scene = new THREE.Scene();
+      scene.add(camera);  // Add camera to scene
+      log('Scene and camera set up');
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        logarithmicDepthBuffer: true
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      container.appendChild(renderer.domElement);
       
-      // Set up camera
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+      // Update camera settings for AR
+      camera.updateProjectionMatrix();
       
       // Set up lighting
       const ambientLight = new THREE.AmbientLight(0x404040, 2);
@@ -416,16 +491,46 @@
       // Set version number
       document.getElementById('version-info').textContent = `Version ${GAME_VERSION}`;
       
-      // Load models
-      loadModels();
+      // Load models with error handling
+      try {
+        log('Starting model loading...');
+        const modelResult = await loadModels().catch(error => {
+          throw new Error('Model loading failed: ' + error.message);
+        });
+        
+        if (!modelResult) {
+          throw new Error('Model loading did not complete successfully');
+        }
+        log('Models loaded successfully');
+        
+        // Create menu after models are loaded
+        try {
+          createMenu();
+          log('Menu created successfully');
+        } catch (menuError) {
+          throw new Error('Menu creation failed: ' + menuError.message);
+        }
+      } catch (error) {
+        log('Error loading models: ' + error.message);
+        alert('Failed to load game models. Please refresh the page.');
+      }
       
       // Handle window resize
       window.addEventListener('resize', onWindowResize, false);
       
-      // Start rendering
+      log('Starting render loop...');
+      // Always set animation loop - it will work for both regular and XR rendering
       renderer.setAnimationLoop(render);
       
       log('Initialization complete');
+      } catch (error) {
+        log('Error during initialization: ' + error.message);
+        alert('Failed to initialize game. Please refresh the page.');
+      }
+      
+      // Initial setup complete
+      log('Initial setup complete - waiting for models to load');
+      document.getElementById('loading-screen').style.display = 'flex';
     }
     
     // Handle window resize
@@ -454,7 +559,7 @@
           
           // Basic session options without DOM overlay
           const sessionOptions = {
-            requiredFeatures: ['hit-test']
+            requiredFeatures: ['hit-test', 'local', 'viewer', 'local-floor']
           };
           
           // Add DOM overlay as optional if the UI container exists
@@ -476,7 +581,7 @@
                 log('Trying again without DOM overlay...');
                 
                 navigator.xr.requestSession('immersive-ar', {
-                  requiredFeatures: ['hit-test']
+                  requiredFeatures: ['hit-test', 'local', 'viewer', 'local-floor']
                 }).then(onSessionStarted)
                 .catch(finalError => {
                   log('FINAL ERROR: ' + finalError.message);
@@ -523,26 +628,44 @@
       controller2.addEventListener('selectend', onSelectEnd);
       scene.add(controller2);
       
-      // Start hit testing once reference space is available
-      session.requestReferenceSpace('viewer').then((referenceSpace) => {
-        xrSession.requestHitTestSource({ space: referenceSpace }).then((source) => {
-          hitTestSource = source;
-        });
-      });
+      // Set up reference spaces and hit testing in the correct order
+      log('Setting up WebXR spaces...');
       
-      session.requestReferenceSpace('local').then((referenceSpace) => {
+      // First get the local reference space
+      session.requestReferenceSpace('local-floor').then((referenceSpace) => {
+        log('Local-floor reference space acquired');
         xrReferenceSpace = referenceSpace;
         
-        // Create instruction text
+        // Then set up viewer space for hit testing
+        log('Requesting viewer reference space');
+        return session.requestReferenceSpace('viewer');
+      }).then((viewerSpace) => {
+        log('Viewer reference space acquired');
+        return session.requestHitTestSource({
+          space: viewerSpace,
+          entityTypes: ['plane']
+        });
+      }).then((source) => {
+        log('Hit test source created successfully');
+        hitTestSource = source;
+        
+        // Create instruction text only after everything is set up
         createInstructionText('Find a flat surface and tap to place the game');
+      }).catch(error => {
+        log('Error setting up AR session: ' + error.message);
+        alert('Error setting up AR experience. Please restart the game.');
       });
       
-      // Create menu once models are loaded
-      if (modelCount === totalModels) {
-        createMenu();
-      } else {
-        // Show loading screen until models are loaded
-        document.getElementById('loading-screen').style.display = 'flex';
+      // Check if models are loaded
+      // Only create menu if this is not from an AR session start
+      if (!xrSession && modelCount === totalModels) {
+        log('All models loaded, creating initial menu');
+        try {
+          createMenu();
+        } catch (error) {
+          log('Error creating menu: ' + error.message);
+          alert('Error setting up game menu. Please restart the game.');
+        }
       }
     }
     
@@ -627,12 +750,43 @@
     }
     
     // Load game models
-    function loadModels() {
-      log('Loading models...');
-      document.getElementById('loading-screen').style.display = 'flex';
+    async function loadModels() {
+      return new Promise(async (resolve, reject) => {
+        try {
+          log('Starting model loading process');
+          
+          // Show loading screen
+          const loadingScreen = document.getElementById('loading-screen');
+          if (!loadingScreen) {
+            throw new Error('Loading screen element not found');
+          }
+          loadingScreen.style.display = 'flex';
+          
+          // Reset loading state
+          modelCount = 0;
       
+      // Get UI elements once
+      const progressBar = document.querySelector('.progress');
       const loadingText = document.getElementById('loading-text');
-      const progressBar = document.getElementById('progress');
+      const loadingScreen = document.getElementById('loading-screen');
+        
+        if (!progressBar || !loadingText || !loadingScreen) {
+          throw new Error('Required UI elements not found');
+        }
+        
+        // Show loading screen
+        loadingScreen.style.display = 'flex';
+        progressBar.style.width = '0%';
+        loadingText.textContent = 'Loading models: 0/' + totalModels;
+        log('Loading screen displayed');
+        
+        // Check THREE.js availability
+        if (!window.THREE) {
+          throw new Error('THREE.js not loaded');
+        }
+        
+        log('Starting model loading process');
+      log('Loading models...');
       
       // Set up loaders
       const dracoLoader = new THREE.DRACOLoader();
@@ -653,6 +807,7 @@
       createSimplePowerUpModel();
       
       function updateLoadingProgress() {
+      log('Updating loading progress: ' + modelCount + '/' + totalModels);
         modelCount++;
         const progress = (modelCount / totalModels) * 100;
         progressBar.style.width = `${progress}%`;
@@ -719,7 +874,7 @@
         updateLoadingProgress();
       }
       
-      function createSimpleProjectileModel() {
+      async function createSimpleProjectileModel() {
         // Create a simple projectile model
         const geometry = new THREE.SphereGeometry(GAME_CONFIG.projectile.size, 16, 8);
         const material = new THREE.MeshStandardMaterial({ 
@@ -736,7 +891,7 @@
         updateLoadingProgress();
       }
       
-      function createSimplePowerUpModel() {
+      async function createSimplePowerUpModel() {
         // Create a simple power-up model (rotating cube)
         const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
         const material = new THREE.MeshStandardMaterial({ 
@@ -1978,16 +2133,38 @@
     
     // Main rendering function
     function render(timestamp, frame) {
-      if (frame && xrSession) {
-        // Get hit test results
-        const referenceSpace = xrReferenceSpace;
-        const session = xrSession;
+      try {
+        // Check core components once
+        if (!scene || !camera || !renderer) {
+          if (DEBUG) {
+            log('Core components not ready - skipping render');
+          }
+          return;
+        }
         
-        if (hitTestSource && referenceSpace) {
-          const hitTestResults = frame.getHitTestResults(hitTestSource);
+        // Always render the scene at the start
+        renderer.render(scene, camera);
+        
+        // Update game state next
+        if (gameActive) {
+          updateGameState(timestamp);
+        }
+
+        if (frame && xrSession) {
+          // Get hit test results
+          const referenceSpace = xrReferenceSpace;
+          if (!referenceSpace) {
+            return;
+          }
+          const session = xrSession;
+          
+          if (hitTestSource) {
+            const hitTestResults = frame.getHitTestResults(hitTestSource);
           
           if (hitTestResults.length > 0) {
             const hit = hitTestResults[0];
+            
+            // Process the hit test result
             const pose = hit.getPose(referenceSpace);
             
             if (pose) {
