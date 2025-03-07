@@ -5,30 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebXR Gopher Shooter</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <style>
+        #startARButton {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px;
+            font-size: 24px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        #startARButton:hover {
+            background-color: #45a049;
+        }
+    </style>
 </head>
 <body>
-    <a-scene embedded ar vr-mode-ui="enabled: false">
-        <!-- Assets (none external, all programmatically generated) -->
-        <a-assets>
-            <!-- We'll use A-Frame primitives instead of external models -->
-        </a-assets>
-        
-        <!-- Entities -->
+    <!-- Button to initiate AR session -->
+    <button id="startARButton">Start AR</button>
+
+    <!-- A-Frame Scene -->
+    <a-scene embedded arjs="sourceType: webcam;" vr-mode-ui="enabled: false">
+        <!-- Camera with UI elements -->
         <a-entity id="camera" camera position="0 1.6 0" wasd-controls look-controls>
-            <a-entity id="startUI" position="0 0 -1" text="value: Point your controller at the floor and pull the trigger to start. Shoot gophers to score points!; width: 1; align: center;" visible="true"></a-entity>
-            <a-entity id="gameOverUI" position="0 0 -1" text="value: Game Over!\nFinal Score: 0\nPull trigger to restart; width: 1; align: center;" visible="false"></a-entity>
+            <a-entity id="startUI" position="0 0 -1" text="value: Point your controller at the floor and pull the trigger to start.\nShoot gophers to score points!; width: 1; align: center; color: white;" visible="true"></a-entity>
+            <a-entity id="gameOverUI" position="0 0 -1" text="value: Game Over!\nFinal Score: 0\nPull trigger to restart; width: 1; align: center; color: white;" visible="false"></a-entity>
         </a-entity>
-        
-        <!-- Controllers -->
+
+        <!-- Controllers with gun component -->
         <a-entity id="leftHand" hand-controls="hand: left" gun></a-entity>
         <a-entity id="rightHand" hand-controls="hand: right" gun></a-entity>
-        
-        <!-- Game area (will be positioned at floor level once marked) -->
+
+        <!-- Game area, initially hidden until floor is marked -->
         <a-entity id="gameArea" visible="false">
-            <!-- Ground marker with visual feedback -->
             <a-plane id="floor" rotation="-90 0 0" width="3" height="3" color="#a3815f" opacity="0.5"></a-plane>
-            
-            <!-- Scoreboard with look-at component -->
             <a-entity id="scoreboard" position="0 0.1 -1" look-at="[camera]">
                 <a-plane width="1" height="0.5" color="#222" opacity="0.8">
                     <a-text id="scoreText" position="-0.45 0.15 0.01" value="Score: 0" color="white"></a-text>
@@ -37,16 +51,17 @@
                 </a-plane>
             </a-entity>
         </a-entity>
-        
-        <!-- Object pools for performance (will be populated in JavaScript) -->
+
+        <!-- Object pools for performance optimization -->
         <a-entity id="gopherPool"></a-entity>
         <a-entity id="projectilePool"></a-entity>
         <a-entity id="explosionPool"></a-entity>
         <a-entity id="powerupPool"></a-entity>
     </a-scene>
-    
+
+    <!-- Game Logic -->
     <script>
-        // Game state and configuration
+        // Game state
         const gameState = {
             isPlaying: false,
             score: 0,
@@ -61,22 +76,22 @@
             explosions: [],
             powerups: []
         };
-        
-        // Configuration values
+
+        // Configuration
         const config = {
-            gopherSpawnInterval: [1000, 3000], // 1-3 seconds in ms
-            gopherLifetime: 2000, // 2 seconds in ms
+            gopherSpawnInterval: [1000, 3000], // ms
+            gopherLifetime: 2000, // ms
             maxGophers: 10,
             maxProjectiles: 10,
-            projectileSpeed: 10, // 10 m/s
-            projectileLifetime: 2000, // 2 seconds in ms
-            powerupChance: 0.2, // 20% chance per spawn check
-            powerupSpawnInterval: [10000, 15000], // 10-15 seconds in ms
-            powerupDuration: 10000, // 10 seconds in ms
-            gameTime: 60000, // 60 seconds in ms
-            gopherSpawnArea: 3, // 3m x 3m area
-            gopherHitRadius: 0.25, // Hit detection radius for gophers
-            powerupHitRadius: 0.3, // Hit detection radius for powerups
+            projectileSpeed: 10, // m/s
+            projectileLifetime: 2000, // ms
+            powerupChance: 0.2,
+            powerupSpawnInterval: [10000, 15000], // ms
+            powerupDuration: 10000, // ms
+            gameTime: 60000, // ms
+            gopherSpawnArea: 3, // meters
+            gopherHitRadius: 0.25,
+            powerupHitRadius: 0.3,
             gopherTypes: {
                 basic: { color: 'brown', points: 10, speed: 1, chance: 0.7 },
                 fast: { color: 'green', points: 20, speed: 1.5, chance: 0.2 },
@@ -87,37 +102,29 @@
                 slowGophers: { color: 'blue', effect: 'slowGophers' }
             }
         };
-        
-        // Object pools (for better performance)
+
+        // Object pools
         const pools = {
             gophers: [],
             projectiles: [],
             explosions: [],
             powerups: []
         };
-        
-        // Sound generation with Web Audio API
+
+        // Audio setup
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        
-        // Generate a simple audio tone
         function generateTone(frequency, duration, type = 'sine') {
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
-            
             oscillator.type = type;
             oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
-            
-            // Fade out
             gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
-            
             oscillator.start();
             oscillator.stop(audioContext.currentTime + duration);
         }
-        
-        // Sound effects
         const sounds = {
             shoot: () => generateTone(500, 0.1, 'square'),
             hit: () => generateTone(300, 0.2, 'sine'),
@@ -126,262 +133,149 @@
                 const gain = audioContext.createGain();
                 osc.connect(gain);
                 gain.connect(audioContext.destination);
-                
                 osc.frequency.setValueAtTime(300, audioContext.currentTime);
                 osc.frequency.linearRampToValueAtTime(600, audioContext.currentTime + 0.5);
-                
                 gain.gain.setValueAtTime(0.3, audioContext.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-                
                 osc.start();
                 osc.stop(audioContext.currentTime + 0.5);
             },
-            floorMarked: () => generateTone(440, 0.3, 'sine') // Sound for floor marking
+            floorMarked: () => generateTone(440, 0.3, 'sine')
         };
-        
-        // A-Frame component for the gun
+
+        // Gun component
         AFRAME.registerComponent('gun', {
             init: function() {
-                // Create gun model
                 const handle = document.createElement('a-box');
-                handle.setAttribute('position', '0 0 0');
                 handle.setAttribute('width', '0.1');
                 handle.setAttribute('height', '0.1');
                 handle.setAttribute('depth', '0.05');
                 handle.setAttribute('color', '#444');
-                
                 const barrel = document.createElement('a-cylinder');
                 barrel.setAttribute('position', '0 0 -0.15');
                 barrel.setAttribute('rotation', '90 0 0');
                 barrel.setAttribute('height', '0.2');
                 barrel.setAttribute('radius', '0.02');
                 barrel.setAttribute('color', '#333');
-                
-                // Add to gun entity
                 this.el.appendChild(handle);
                 this.el.appendChild(barrel);
-                
-                // Bind event handlers
-                this.shootHandler = this.shoot.bind(this);
-                this.markFloorHandler = this.markFloor.bind(this);
-                this.restartGameHandler = this.restartGame.bind(this);
-                
-                // Add event listeners
-                this.el.addEventListener('triggerdown', this.shootHandler);
-                if (!gameState.floorMarked) {
-                    this.el.addEventListener('triggerdown', this.markFloorHandler);
-                }
-                this.el.addEventListener('triggerdown', this.restartGameHandler);
+
+                this.el.addEventListener('triggerdown', () => {
+                    if (!gameState.floorMarked) {
+                        this.markFloor();
+                    } else if (gameState.isPlaying) {
+                        this.shoot();
+                    } else {
+                        this.restartGame();
+                    }
+                });
             },
-            
-            remove: function() {
-                // Remove event listeners
-                this.el.removeEventListener('triggerdown', this.shootHandler);
-                this.el.removeEventListener('triggerdown', this.markFloorHandler);
-                this.el.removeEventListener('triggerdown', this.restartGameHandler);
+            markFloor: function() {
+                const controller = this.el.object3D;
+                const position = new THREE.Vector3();
+                controller.getWorldPosition(position);
+                const gameArea = document.querySelector('#gameArea');
+                gameArea.setAttribute('position', `${position.x} 0 ${position.z}`);
+                gameArea.setAttribute('visible', true);
+                const floorPlane = document.querySelector('#floor');
+                floorPlane.setAttribute('color', '#ffffff');
+                setTimeout(() => floorPlane.setAttribute('color', '#a3815f'), 300);
+                sounds.floorMarked();
+                document.querySelector('#startUI').setAttribute('visible', false);
+                gameState.floorMarked = true;
+                startGame();
             },
-            
             shoot: function() {
-                if (!gameState.isPlaying || !gameState.floorMarked) return;
-                
-                // Limit active projectiles
                 if (gameState.activeProjectiles.length >= config.maxProjectiles) return;
-                
-                // Play sound
                 sounds.shoot();
-                
-                // Get projectile from pool or create new one
                 let projectile;
-                const projectilePool = document.querySelector('#projectilePool');
-                
                 if (pools.projectiles.length > 0) {
                     projectile = pools.projectiles.pop();
                     projectile.setAttribute('visible', true);
                 } else {
                     projectile = document.createElement('a-sphere');
-                    projectile.setAttribute('radius', 0.02);
+                    projectile.setAttribute('radius', '0.02');
                     projectile.setAttribute('color', 'white');
                     projectile.setAttribute('material', 'emissive: white; emissiveIntensity: 0.5');
-                    projectilePool.appendChild(projectile);
+                    document.querySelector('#projectilePool').appendChild(projectile);
                 }
-                
-                // Position at gun barrel with offset
                 const gunWorldPosition = new THREE.Vector3();
                 const gunWorldRotation = new THREE.Quaternion();
                 this.el.object3D.getWorldPosition(gunWorldPosition);
                 this.el.object3D.getWorldQuaternion(gunWorldRotation);
-                
-                // Offset along the barrel
                 const offset = new THREE.Vector3(0, 0, -0.1).applyQuaternion(gunWorldRotation);
                 const spawnPosition = gunWorldPosition.add(offset);
-                
-                // Set projectile position
                 projectile.setAttribute('position', spawnPosition);
-                
-                // Get direction
-                const direction = new THREE.Vector3(0, 0, -1);
-                direction.applyQuaternion(gunWorldRotation);
-                direction.normalize();
-                
-                // Add to active projectiles with velocity
-                const projectileData = {
+                const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(gunWorldRotation).normalize();
+                gameState.activeProjectiles.push({
                     element: projectile,
                     velocity: direction.multiplyScalar(config.projectileSpeed),
                     createdAt: Date.now()
-                };
-                
-                gameState.activeProjectiles.push(projectileData);
+                });
             },
-            
-            markFloor: function(event) {
-                if (gameState.floorMarked) return;
-                
-                // Use controller position and rotation to cast a ray downward
-                const controller = this.el.object3D;
-                const position = new THREE.Vector3();
-                controller.getWorldPosition(position);
-                
-                // Simplified: assume floor at y=0 for now
-                const floorY = 0; // Replace with hit-test in real AR
-                const gameArea = document.querySelector('#gameArea');
-                gameArea.setAttribute('position', `${position.x} ${floorY} ${position.z}`);
-                gameArea.setAttribute('visible', true);
-                
-                // Visual feedback: briefly flash the floor plane
-                const floorPlane = document.querySelector('#floor');
-                floorPlane.setAttribute('color', '#ffffff');
-                setTimeout(() => floorPlane.setAttribute('color', '#a3815f'), 300);
-                
-                // Play sound for floor marking
-                sounds.floorMarked();
-                
-                // Hide start UI
-                document.querySelector('#startUI').setAttribute('visible', false);
-                
-                // Mark floor as set and start game
-                gameState.floorMarked = true;
-                startGame();
-                
-                // Remove this floor marking event listener
-                this.el.removeEventListener('triggerdown', this.markFloorHandler);
-            },
-            
             restartGame: function() {
-                if (gameState.isPlaying || !gameState.floorMarked) return;
-                
-                // Reset game state
-                gameState.score = 0;
-                gameState.timeRemaining = 60;
-                gameState.scoreMultiplier = 1;
-                gameState.slowGophers = false;
-                gameState.powerupTimeRemaining = 0;
-                gameState.powerupType = null;
-                
-                // Clean up entities
+                resetGameState();
                 returnAllToPool();
-                
-                // Hide game over UI
                 document.querySelector('#gameOverUI').setAttribute('visible', false);
-                
-                // Start new game
                 startGame();
             }
         });
-        
-        // Start the game
+
+        // Game functions
         function startGame() {
             gameState.isPlaying = true;
-            gameState.score = 0;
-            gameState.timeRemaining = 60;
-            gameState.scoreMultiplier = 1;
-            gameState.slowGophers = false;
-            
-            // Update scoreboard
+            resetGameState(false);
             updateScoreboard();
-            
-            // Start game loop
             gameLoop();
-            
-            // Start spawning gophers
             scheduleNextGopherSpawn();
-            
-            // Start spawning powerups
             scheduleNextPowerupSpawn();
-            
-            // Start countdown timer
             const startTime = Date.now();
             const timerInterval = setInterval(() => {
                 const elapsed = Math.floor((Date.now() - startTime) / 1000);
                 gameState.timeRemaining = Math.max(0, config.gameTime / 1000 - elapsed);
-                
                 if (gameState.timeRemaining <= 0) {
                     clearInterval(timerInterval);
                     endGame();
                 }
-                
-                // Update powerup timers
-                if (gameState.powerupTimeRemaining > 0) {
-                    gameState.powerupTimeRemaining -= 1;
-                    if (gameState.powerupTimeRemaining <= 0) {
-                        // Reset powerup effects
-                        gameState.scoreMultiplier = 1;
-                        gameState.slowGophers = false;
-                        gameState.powerupType = null;
-                    }
-                }
-                
+                updatePowerups();
                 updateScoreboard();
             }, 1000);
         }
-        
-        // End the game
+
         function endGame() {
             gameState.isPlaying = false;
-            
-            // Show game over UI
-            const gameOverUI = document.querySelector('#gameOverUI');
-            gameOverUI.setAttribute('text', `value: Game Over!\nFinal Score: ${gameState.score}\nPull trigger to restart; width: 1; align: center;`);
-            gameOverUI.setAttribute('visible', true);
-            
-            // Return all entities to pool
+            document.querySelector('#gameOverUI').setAttribute('text', `value: Game Over!\nFinal Score: ${gameState.score}\nPull trigger to restart; width: 1; align: center;`);
+            document.querySelector('#gameOverUI').setAttribute('visible', true);
             returnAllToPool();
         }
-        
-        // Return all active entities to their respective pools
-        function returnAllToPool() {
-            // Return gophers to pool
-            gameState.activeGophers.forEach(gopher => {
-                gopher.element.setAttribute('visible', false);
-                pools.gophers.push(gopher.element);
-            });
-            gameState.activeGophers = [];
-            
-            // Return projectiles to pool
-            gameState.activeProjectiles.forEach(projectile => {
-                projectile.element.setAttribute('visible', false);
-                pools.projectiles.push(projectile.element);
-            });
-            gameState.activeProjectiles = [];
-            
-            // Return explosions to pool
-            gameState.explosions.forEach(explosion => {
-                explosion.element.setAttribute('visible', false);
-                pools.explosions.push(explosion.element);
-            });
-            gameState.explosions = [];
-            
-            // Return powerups to pool
-            gameState.powerups.forEach(powerup => {
-                powerup.element.setAttribute('visible', false);
-                pools.powerups.push(powerup.element);
-            });
-            gameState.powerups = [];
+
+        function resetGameState(fullReset = true) {
+            gameState.score = 0;
+            gameState.timeRemaining = 60;
+            gameState.scoreMultiplier = 1;
+            gameState.slowGophers = false;
+            gameState.powerupTimeRemaining = 0;
+            gameState.powerupType = null;
+            if (fullReset) {
+                gameState.floorMarked = false;
+                gameState.isPlaying = false;
+                document.querySelector('#gameArea').setAttribute('visible', false);
+                document.querySelector('#startUI').setAttribute('visible', true);
+            }
         }
-        
-        // Schedule next gopher spawn
+
+        function returnAllToPool() {
+            ['activeGophers', 'activeProjectiles', 'explosions', 'powerups'].forEach(type => {
+                gameState[type].forEach(item => {
+                    item.element.setAttribute('visible', false);
+                    pools[type.replace('active', '').toLowerCase()].push(item.element);
+                });
+                gameState[type] = [];
+            });
+        }
+
         function scheduleNextGopherSpawn() {
             if (!gameState.isPlaying) return;
-            
             const delay = Math.random() * (config.gopherSpawnInterval[1] - config.gopherSpawnInterval[0]) + config.gopherSpawnInterval[0];
             setTimeout(() => {
                 if (gameState.isPlaying) {
@@ -390,11 +284,9 @@
                 }
             }, delay);
         }
-        
-        // Schedule next powerup spawn
+
         function scheduleNextPowerupSpawn() {
             if (!gameState.isPlaying) return;
-            
             const delay = Math.random() * (config.powerupSpawnInterval[1] - config.powerupSpawnInterval[0]) + config.powerupSpawnInterval[0];
             setTimeout(() => {
                 if (gameState.isPlaying && Math.random() < config.powerupChance) {
@@ -403,90 +295,58 @@
                 scheduleNextPowerupSpawn();
             }, delay);
         }
-        
-        // Spawn a gopher
+
         function spawnGopher() {
             if (gameState.activeGophers.length >= config.maxGophers) return;
-            
-            // Determine gopher type based on probability
-            const rand = Math.random();
-            let gopherType;
-            let cumulativeProbability = 0;
-            
-            for (const type in config.gopherTypes) {
-                cumulativeProbability += config.gopherTypes[type].chance;
-                if (rand < cumulativeProbability) {
-                    gopherType = config.gopherTypes[type];
-                    gopherType.name = type;
-                    break;
-                }
-            }
-            
-            // Get gopher from pool or create new one
-            let gopher;
-            const gopherPool = document.querySelector('#gopherPool');
-            
-            if (pools.gophers.length > 0) {
-                gopher = pools.gophers.pop();
-                gopher.setAttribute('visible', true);
-            } else {
-                // Create gopher body
-                gopher = document.createElement('a-entity');
-                
-                const body = document.createElement('a-cylinder');
-                body.setAttribute('height', '0.3');
-                body.setAttribute('radius', '0.1');
-                body.setAttribute('position', '0 0.15 0');
-                
-                const head = document.createElement('a-sphere');
-                head.setAttribute('radius', '0.15');
-                head.setAttribute('position', '0 0.45 0');
-                
-                gopher.appendChild(body);
-                gopher.appendChild(head);
-                gopherPool.appendChild(gopher);
-            }
-            
-            // Set color based on type
-            gopher.querySelectorAll('a-cylinder, a-sphere').forEach(part => {
-                part.setAttribute('color', gopherType.color);
-            });
-            
-            // Random position within spawn area
-            const gameArea = document.querySelector('#gameArea');
-            const gameAreaPos = gameArea.getAttribute('position');
-            const halfSize = config.gopherSpawnArea / 2;
-            const x = Math.random() * config.gopherSpawnArea - halfSize;
-            const z = Math.random() * config.gopherSpawnArea - halfSize;
-            
-            // Position gopher underneath the ground
-            gopher.setAttribute('position', `${gameAreaPos.x + x} -0.5 ${gameAreaPos.z + z}`);
-            
-            // Calculate speed (affected by slow powerup)
+            let gopherType = selectGopherType();
+            let gopher = getOrCreateGopher(gopherType);
+            positionEntity(gopher, config.gopherSpawnArea);
             const speed = gameState.slowGophers ? gopherType.speed * 0.5 : gopherType.speed;
-            
-            // Add to active gophers
-            const gopherData = {
+            gameState.activeGophers.push({
                 element: gopher,
                 type: gopherType,
                 createdAt: Date.now(),
                 state: 'rising',
                 speed: speed
-            };
-            
-            gameState.activeGophers.push(gopherData);
+            });
         }
-        
-        // Spawn a powerup
+
+        function selectGopherType() {
+            const rand = Math.random();
+            let cumulative = 0;
+            for (const type in config.gopherTypes) {
+                cumulative += config.gopherTypes[type].chance;
+                if (rand < cumulative) {
+                    return { ...config.gopherTypes[type], name: type };
+                }
+            }
+        }
+
+        function getOrCreateGopher(gopherType) {
+            let gopher;
+            if (pools.gophers.length > 0) {
+                gopher = pools.gophers.pop();
+                gopher.setAttribute('visible', true);
+            } else {
+                gopher = document.createElement('a-entity');
+                const body = document.createElement('a-cylinder');
+                body.setAttribute('height', '0.3');
+                body.setAttribute('radius', '0.1');
+                body.setAttribute('position', '0 0.15 0');
+                const head = document.createElement('a-sphere');
+                head.setAttribute('radius', '0.15');
+                head.setAttribute('position', '0 0.45 0');
+                gopher.appendChild(body);
+                gopher.appendChild(head);
+                document.querySelector('#gopherPool').appendChild(gopher);
+            }
+            gopher.querySelectorAll('*').forEach(part => part.setAttribute('color', gopherType.color));
+            return gopher;
+        }
+
         function spawnPowerup() {
-            // Choose a random powerup type
-            const powerupTypes = Object.values(config.powerupTypes);
-            const powerupType = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
-            
-            // Get powerup from pool or create new one
+            const powerupType = Object.values(config.powerupTypes)[Math.floor(Math.random() * Object.keys(config.powerupTypes).length)];
             let powerup;
-            const powerupPool = document.querySelector('#powerupPool');
-            
             if (pools.powerups.length > 0) {
                 powerup = pools.powerups.pop();
                 powerup.setAttribute('visible', true);
@@ -495,49 +355,34 @@
                 powerup.setAttribute('width', '0.2');
                 powerup.setAttribute('height', '0.2');
                 powerup.setAttribute('depth', '0.2');
-                powerupPool.appendChild(powerup);
+                document.querySelector('#powerupPool').appendChild(powerup);
             }
-            
-            // Set color
             powerup.setAttribute('color', powerupType.color);
             powerup.setAttribute('material', 'emissive: ' + powerupType.color + '; emissiveIntensity: 0.5');
-            
-            // Random position within spawn area
-            const gameArea = document.querySelector('#gameArea');
-            const gameAreaPos = gameArea.getAttribute('position');
-            const halfSize = config.gopherSpawnArea / 2;
-            const x = Math.random() * config.gopherSpawnArea - halfSize;
-            const z = Math.random() * config.gopherSpawnArea - halfSize;
-            
-            // Position powerup just above the ground
-            powerup.setAttribute('position', `${gameAreaPos.x + x} 0.2 ${gameAreaPos.z + z}`);
-            
-            // Add to active powerups
-            const powerupData = {
-                element: powerup,
-                type: powerupType,
-                createdAt: Date.now()
-            };
-            
-            gameState.powerups.push(powerupData);
-            
-            // Automatically remove powerup after 5 seconds if not collected
-            setTimeout(() => {
-                const index = gameState.powerups.findIndex(p => p === powerupData);
-                if (index !== -1) {
-                    gameState.powerups.splice(index, 1);
-                    powerup.setAttribute('visible', false);
-                    pools.powerups.push(powerup);
-                }
-            }, 5000);
+            positionEntity(powerup, config.gopherSpawnArea, 0.2);
+            gameState.powerups.push({ element: powerup, type: powerupType, createdAt: Date.now() });
+            setTimeout(() => despawnPowerup(powerup), 5000);
         }
-        
-        // Create explosion effect
+
+        function positionEntity(entity, areaSize, yOffset = -0.5) {
+            const gameAreaPos = document.querySelector('#gameArea').getAttribute('position');
+            const halfSize = areaSize / 2;
+            const x = Math.random() * areaSize - halfSize + gameAreaPos.x;
+            const z = Math.random() * areaSize - halfSize + gameAreaPos.z;
+            entity.setAttribute('position', `${x} ${yOffset} ${z}`);
+        }
+
+        function despawnPowerup(powerup) {
+            const index = gameState.powerups.findIndex(p => p.element === powerup);
+            if (index !== -1) {
+                gameState.powerups.splice(index, 1);
+                powerup.setAttribute('visible', false);
+                pools.powerups.push(powerup);
+            }
+        }
+
         function createExplosion(position) {
-            // Get explosion from pool or create new one
             let explosion;
-            const explosionPool = document.querySelector('#explosionPool');
-            
             if (pools.explosions.length > 0) {
                 explosion = pools.explosions.pop();
                 explosion.setAttribute('visible', true);
@@ -546,145 +391,104 @@
                 explosion.setAttribute('radius', '0.1');
                 explosion.setAttribute('opacity', '0.8');
                 explosion.setAttribute('material', 'emissive: yellow; emissiveIntensity: 0.8');
-                explosionPool.appendChild(explosion);
+                document.querySelector('#explosionPool').appendChild(explosion);
             }
-            
-            // Position at the hit location
             explosion.setAttribute('position', position);
-            
-            // Scale up and fade out
             explosion.setAttribute('scale', '0.1 0.1 0.1');
-            const explosionData = {
-                element: explosion,
-                createdAt: Date.now()
-            };
-            
-            gameState.explosions.push(explosionData);
+            gameState.explosions.push({ element: explosion, createdAt: Date.now() });
         }
-        
-        // Apply a powerup effect
+
         function applyPowerup(powerupType) {
-            // Play powerup sound
             sounds.powerup();
-            
-            // Apply effect only if not already active
-            if (powerupType.effect === 'doubleScore' && gameState.powerupType !== 'doubleScore') {
+            if (powerupType.effect === 'doubleScore') {
                 gameState.scoreMultiplier = 2;
                 gameState.powerupType = 'doubleScore';
-                gameState.powerupTimeRemaining = config.powerupDuration / 1000;
-            } else if (powerupType.effect === 'slowGophers' && gameState.powerupType !== 'slowGophers') {
+            } else if (powerupType.effect === 'slowGophers') {
                 gameState.slowGophers = true;
                 gameState.powerupType = 'slowGophers';
-                gameState.powerupTimeRemaining = config.powerupDuration / 1000;
+            }
+            gameState.powerupTimeRemaining = config.powerupDuration / 1000;
+        }
+
+        function updatePowerups() {
+            if (gameState.powerupTimeRemaining > 0) {
+                gameState.powerupTimeRemaining -= 1;
+                if (gameState.powerupTimeRemaining <= 0) {
+                    gameState.scoreMultiplier = 1;
+                    gameState.slowGophers = false;
+                    gameState.powerupType = null;
+                }
             }
         }
-        
-        // Check for collisions between projectiles and gophers/powerups
+
         function checkCollisions() {
-            // Projectile vs Gopher
-            gameState.activeProjectiles.forEach(projectile => {
-                const projectilePos = projectile.element.getAttribute('position');
-                
-                // Check against gophers
-                gameState.activeGophers.forEach(gopher => {
-                    // Only check gophers that are visible (above ground)
+            gameState.activeProjectiles.forEach((projectile, pIndex) => {
+                const pPos = projectile.element.getAttribute('position');
+                gameState.activeGophers.forEach((gopher, gIndex) => {
                     if (gopher.state !== 'visible') return;
-                    
-                    const gopherPos = gopher.element.getAttribute('position');
-                    
-                    // Simple distance check for collision
-                    const dx = projectilePos.x - gopherPos.x;
-                    const dy = projectilePos.y - gopherPos.y;
-                    const dz = projectilePos.z - gopherPos.z;
-                    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
-                    
-                    if (distance < config.gopherHitRadius) {
-                        // Mark gopher as hit
-                        gopher.state = 'hit';
-                        
-                        // Update score
-                        gameState.score += gopher.type.points * gameState.scoreMultiplier;
-                        updateScoreboard();
-                        
-                        // Create explosion
-                        createExplosion(gopherPos);
-                        
-                        // Play hit sound
-                        sounds.hit();
-                        
-                        // Return projectile to pool
-                        projectile.element.setAttribute('visible', false);
-                        pools.projectiles.push(projectile.element);
-                        const projectileIndex = gameState.activeProjectiles.indexOf(projectile);
-                        if (projectileIndex !== -1) {
-                            gameState.activeProjectiles.splice(projectileIndex, 1);
-                        }
+                    const gPos = gopher.element.getAttribute('position');
+                    if (isCollision(pPos, gPos, config.gopherHitRadius)) {
+                        handleGopherHit(gopher, gIndex, pPos);
+                        removeProjectile(projectile, pIndex);
                     }
                 });
-                
-                // Check against powerups
-                gameState.powerups.forEach(powerup => {
-                    const powerupPos = powerup.element.getAttribute('position');
-                    
-                    // Simple distance check for collision
-                    const dx = projectilePos.x - powerupPos.x;
-                    const dy = projectilePos.y - powerupPos.y;
-                    const dz = projectilePos.z - powerupPos.z;
-                    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
-                    
-                    if (distance < config.powerupHitRadius) {
-                        // Apply powerup
+                gameState.powerups.forEach((powerup, puIndex) => {
+                    const puPos = powerup.element.getAttribute('position');
+                    if (isCollision(pPos, puPos, config.powerupHitRadius)) {
                         applyPowerup(powerup.type);
-                        
-                        // Create explosion
-                        createExplosion(powerupPos);
-                        
-                        // Return powerup to pool
+                        createExplosion(puPos);
+                        gameState.powerups.splice(puIndex, 1);
                         powerup.element.setAttribute('visible', false);
                         pools.powerups.push(powerup.element);
-                        const powerupIndex = gameState.powerups.indexOf(powerup);
-                        if (powerupIndex !== -1) {
-                            gameState.powerups.splice(powerupIndex, 1);
-                        }
-                        
-                        // Return projectile to pool
-                        projectile.element.setAttribute('visible', false);
-                        pools.projectiles.push(projectile.element);
-                        const projectileIndex = gameState.activeProjectiles.indexOf(projectile);
-                        if (projectileIndex !== -1) {
-                            gameState.activeProjectiles.splice(projectileIndex, 1);
-                        }
+                        removeProjectile(projectile, pIndex);
                     }
                 });
             });
         }
-        
-        // Update scoreboard
+
+        function isCollision(pos1, pos2, radius) {
+            const dx = pos1.x - pos2.x;
+            const dy = pos1.y - pos2.y;
+            const dz = pos1.z - pos2.z;
+            return Math.sqrt(dx * dx + dy * dy + dz * dz) < radius;
+        }
+
+        function handleGopherHit(gopher, index, position) {
+            gopher.state = 'hit';
+            gameState.score += gopher.type.points * gameState.scoreMultiplier;
+            updateScoreboard();
+            createExplosion(position);
+            sounds.hit();
+        }
+
+        function removeProjectile(projectile, index) {
+            projectile.element.setAttribute('visible', false);
+            pools.projectiles.push(projectile.element);
+            gameState.activeProjectiles.splice(index, 1);
+        }
+
         function updateScoreboard() {
             document.querySelector('#scoreText').setAttribute('value', `Score: ${gameState.score}`);
             document.querySelector('#timeText').setAttribute('value', `Time: ${gameState.timeRemaining}`);
-            
-            // Show active powerup
-            let powerupText = '';
-            if (gameState.powerupType === 'doubleScore') {
-                powerupText = `Double Score: ${gameState.powerupTimeRemaining}s`;
-            } else if (gameState.powerupType === 'slowGophers') {
-                powerupText = `Slow Gophers: ${gameState.powerupTimeRemaining}s`;
-            }
-            document.querySelector('#powerupText').setAttribute('value', powerupText);
+            document.querySelector('#powerupText').setAttribute('value', gameState.powerupType ? `${gameState.powerupType === 'doubleScore' ? 'Double Score' : 'Slow Gophers'}: ${gameState.powerupTimeRemaining}s` : '');
         }
-        
-        // Main game loop with delta time
+
         let lastTime = 0;
         function gameLoop(time) {
             if (!gameState.isPlaying) return;
-            
-            const delta = (time - lastTime) / 1000; // Delta in seconds
+            const delta = (time - lastTime) / 1000;
             lastTime = time;
-            
             const now = Date.now();
-            
-            // Update projectiles
+
+            updateProjectiles(delta, now);
+            updateGophers(delta, now);
+            updateExplosions(now);
+            checkCollisions();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updateProjectiles(delta, now) {
             gameState.activeProjectiles.forEach((projectile, index) => {
                 if (now - projectile.createdAt > config.projectileLifetime) {
                     projectile.element.setAttribute('visible', false);
@@ -692,85 +496,71 @@
                     gameState.activeProjectiles.splice(index, 1);
                     return;
                 }
-                
-                const currentPos = projectile.element.getAttribute('position');
-                const velocity = projectile.velocity;
-                const newPos = {
-                    x: currentPos.x + velocity.x * delta,
-                    y: currentPos.y + velocity.y * delta,
-                    z: currentPos.z + velocity.z * delta
-                };
-                projectile.element.setAttribute('position', newPos);
+                const pos = projectile.element.getAttribute('position');
+                const vel = projectile.velocity;
+                projectile.element.setAttribute('position', {
+                    x: pos.x + vel.x * delta,
+                    y: pos.y + vel.y * delta,
+                    z: pos.z + vel.z * delta
+                });
             });
-            
-            // Update gophers
+        }
+
+        function updateGophers(delta, now) {
             gameState.activeGophers.forEach((gopher, index) => {
-                const currentPos = gopher.element.getAttribute('position');
+                const pos = gopher.element.getAttribute('position');
                 if (gopher.state === 'rising') {
-                    currentPos.y += 0.5 * gopher.speed * delta; // Speed in m/s
-                    if (currentPos.y >= 0) {
-                        currentPos.y = 0;
+                    pos.y += 0.5 * gopher.speed * delta;
+                    if (pos.y >= 0) {
+                        pos.y = 0;
                         gopher.state = 'visible';
+                        setTimeout(() => gopher.state = 'lowering', config.gopherLifetime);
                     }
-                    gopher.element.setAttribute('position', currentPos);
                 } else if (gopher.state === 'lowering' || gopher.state === 'hit') {
-                    currentPos.y -= 0.5 * gopher.speed * delta;
-                    if (currentPos.y <= -0.5) {
+                    pos.y -= 0.5 * gopher.speed * delta;
+                    if (pos.y <= -0.5) {
                         gopher.element.setAttribute('visible', false);
                         pools.gophers.push(gopher.element);
                         gameState.activeGophers.splice(index, 1);
-                    } else {
-                        gopher.element.setAttribute('position', currentPos);
+                        return;
                     }
                 }
+                gopher.element.setAttribute('position', pos);
             });
-            
-            // Update explosions
+        }
+
+        function updateExplosions(now) {
             gameState.explosions.forEach((explosion, index) => {
                 const age = now - explosion.createdAt;
-                if (age > 500) { // 500ms lifespan
+                if (age > 500) {
                     explosion.element.setAttribute('visible', false);
                     pools.explosions.push(explosion.element);
                     gameState.explosions.splice(index, 1);
                     return;
                 }
-                
-                // Scale up and fade out
                 const scale = 0.1 + (age / 500) * 1.5;
                 const opacity = 0.8 - (age / 500) * 0.8;
-                
                 explosion.element.setAttribute('scale', `${scale} ${scale} ${scale}`);
                 explosion.element.setAttribute('opacity', opacity);
             });
-            
-            // Check for collisions
-            checkCollisions();
-            
-            // Continue the game loop
-            requestAnimationFrame(gameLoop);
         }
-        
-        // Initialize event listeners
+
+        // Event listeners
         document.addEventListener('DOMContentLoaded', () => {
-            // Listen for A-Frame scene loaded
+            const startButton = document.getElementById('startARButton');
             const scene = document.querySelector('a-scene');
-            scene.addEventListener('loaded', () => {
-                console.log('A-Frame scene loaded. Enter AR to begin.');
+            startButton.addEventListener('click', () => {
+                scene.enterVR();
+                startButton.style.display = 'none';
+                console.log('AR session requested');
             });
-            
-            // Listen for WebXR session
-            scene.addEventListener('enter-vr', () => {
-                console.log('WebXR session started.');
-                // Start instruction text will guide the user to mark the floor
-            });
-            
-            // Listen for WebXR session end
+            scene.addEventListener('loaded', () => console.log('Scene loaded'));
+            scene.addEventListener('enter-vr', () => console.log('Entered AR'));
             scene.addEventListener('exit-vr', () => {
-                console.log('WebXR session ended.');
-                // If game is in progress, end it
-                if (gameState.isPlaying) {
-                    endGame();
-                }
+                console.log('Exited AR');
+                if (gameState.isPlaying) endGame();
+                startButton.style.display = 'block';
+                resetGameState();
             });
         });
     </script>
