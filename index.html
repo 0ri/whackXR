@@ -1,2080 +1,792 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  <title>WebXR Mole Shooter</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-      overflow: hidden;
-    }
-    
-    #container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: #000;
-      z-index: 1;
-    }
-    
-    #ui-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 2;
-    }
-    
-    .button {
-      display: inline-block;
-      padding: 10px 20px;
-      background-color: #3498db;
-      color: white;
-      border-radius: 5px;
-      cursor: pointer;
-      user-select: none;
-      pointer-events: auto;
-    }
-    
-    .button:hover {
-      background-color: #2980b9;
-    }
-    
-    .button:active {
-      background-color: #1c6ea4;
-    }
-    
-    .center {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-      color: white;
-    }
-    
-    .hidden {
-      display: none !important;
-    }
-    
-    #loading-screen {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.8);
-      color: white;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-    
-    .progress-bar {
-      width: 80%;
-      height: 20px;
-      background-color: #333;
-      border-radius: 10px;
-      margin-top: 20px;
-      overflow: hidden;
-    }
-    
-    .progress {
-      height: 100%;
-      background-color: #3498db;
-      width: 0%;
-      transition: width 0.3s ease;
-    }
-    
-    #game-title {
-      font-size: 2.5em;
-      margin-bottom: 20px;
-      color: #3498db;
-      text-shadow: 0 0 10px rgba(52, 152, 219, 0.7);
-    }
-    
-    #version-info {
-      position: absolute;
-      bottom: 10px;
-      right: 10px;
-      color: #7f8c8d;
-      font-size: 0.8em;
-    }
-    
-    #debug-panel {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      background-color: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 10px;
-      border-radius: 5px;
-      font-family: monospace;
-      max-width: 300px;
-      max-height: 200px;
-      overflow-y: auto;
-      z-index: 1000;
-      font-size: 12px;
-      display: none;
-    }
-    
-    .game-mode-button {
-      margin: 10px;
-      padding: 15px 30px;
-      background-color: #3498db;
-      color: white;
-      border-radius: 5px;
-      cursor: pointer;
-      user-select: none;
-      pointer-events: auto;
-      font-size: 1.2em;
-    }
-    
-    .game-mode-button:hover {
-      background-color: #2980b9;
-    }
-    
-    .game-mode-description {
-      margin-top: 5px;
-      font-size: 0.8em;
-      color: #bdc3c7;
-    }
-  </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebXR Gopher Shooter</title>
+    <!-- A-Frame is the only external library we need -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 </head>
 <body>
-  <div id="container"></div>
-  <div id="ui-container">
-    <div id="start-screen" class="center">
-      <h1 id="game-title">WebXR Mole Shooter</h1>
-      <div id="ar-button" class="button">Start AR</div>
-      <div id="version-info">Version 1.0.9</div>
-    </div>
-  </div>
-  <div id="loading-screen">
-    <h2>Loading Game Assets</h2>
-    <div class="progress-bar">
-      <div id="progress" class="progress"></div>
-    </div>
-    <div id="loading-text">Loading models: 0/5</div>
-  </div>
-  <div id="debug-panel"></div>
-
-  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-  <script type="module">
-    // No external model loaders needed as we create models programmatically
-  </script>
-  <script>
-    // GAME VERSION
-    const GAME_VERSION = '1.0.9';
-    
-    // DEBUG FLAG - Set to true for debug output
-    const DEBUG = false;
-    
-    // Global variables
-    let container, scene, camera, renderer, controller1, controller2;
-    let reticle, hitTestSource = null, hitTestSourceRequested = false;
-    let floorReticle, floorY = 0;
-    let xrSession = null, xrReferenceSpace = null, xrHitTestSpace = null;
-    let raycaster, tempMatrix;
-    let gameActive = false;
-    let models = {};
-    let moles = [];
-    let projectiles = [];
-    let powerUps = [];
-    let activePowerUps = {};
-    let scoreBoard = null;
-    let menuBoard = null;
-    let lastFireTime = 0;
-    let modelCount = 0;
-    let totalModels = 5;
-    let score = 0;
-    let timeRemaining = 0;
-    let scoreMultiplier = 1;
-    let gameTimer = null;
-    let currentGameMode = null;
-    let currentDifficulty = null;
-    let speedMultiplier = 1;
-    let soundEnabled = true;
-    let hapticFeedbackEnabled = true;
-    let explosions = [];
-    let soundPool = {};
-    let floorSelected = false;
-
-    
-    // Game configuration
-    const GAME_CONFIG = {
-      projectile: {
-        speed: 5, // meters per second
-        size: 0.02, // meters
-        lifetime: 2000, // milliseconds
-        cooldown: 300, // milliseconds
-      },
-      ui: {
-        scoreBoardWidth: 0.3, // meters
-        scoreBoardHeight: 0.15, // meters
-        menuWidth: 0.4, // meters
-        menuHeight: 0.3, // meters
-        fontSizeTitle: 0.03, // meters
-        fontSize: 0.015, // meters
-      },
-      mole: {
-        spawnRadius: 1.5, // meters
-        minDistance: 0.5, // meters from center
-      },
-      powerUp: {
-        lifetime: 10000, // milliseconds
-        spawnRadius: 1.8, // meters
-        types: [
-          { id: 'rapidFire', name: 'Rapid Fire', duration: 10000, color: 0xff0000 },
-          { id: 'doublePoints', name: 'Double Points', duration: 15000, color: 0x00ff00 },
-          { id: 'timeSlow', name: 'Time Slow', duration: 8000, color: 0x0000ff },
-        ]
-      }
-    };
-    
-    // Game modes
-    const GAME_MODES = {
-      classic: {
-        name: 'Classic',
-        description: 'Hit as many moles as you can in 60 seconds',
-        timeLimit: 60000, // milliseconds (60 seconds)
-        spawnInterval: 1000, // milliseconds
-        difficultyIncrease: 10000, // milliseconds
-        powerUpSpawnInterval: 10000, // milliseconds
-      },
-      timeAttack: {
-        name: 'Time Attack',
-        description: 'Time counts down, hit moles to add time',
-        timeLimit: 30000, // milliseconds (30 seconds)
-        spawnInterval: 1000, // milliseconds
-        timeBonus: 2, // seconds added per hit
-        difficultyIncrease: 10000, // milliseconds
-        powerUpSpawnInterval: 15000, // milliseconds
-      },
-      endless: {
-        name: 'Endless',
-        description: 'Play until you miss too many moles',
-        spawnInterval: 1500, // milliseconds
-        difficultyIncrease: 10000, // milliseconds
-        missesAllowed: 3, // game ends after this many misses
-        powerUpSpawnInterval: 12000, // milliseconds
-      }
-    };
-    
-    // Difficulty levels
-    const DIFFICULTY_LEVELS = [
-      {
-        level: 1,
-        moleCount: 3,
-        spawnInterval: 1.0, // multiplier
-        moleLifetime: 2000, // milliseconds
-        misses: 0
-      },
-      {
-        level: 2,
-        moleCount: 4,
-        spawnInterval: 0.9, // multiplier
-        moleLifetime: 1800, // milliseconds
-        misses: 0
-      },
-      {
-        level: 3,
-        moleCount: 5,
-        spawnInterval: 0.8, // multiplier
-        moleLifetime: 1600, // milliseconds
-        misses: 0
-      },
-      {
-        level: 4,
-        moleCount: 5,
-        spawnInterval: 0.7, // multiplier
-        moleLifetime: 1400, // milliseconds
-        misses: 0
-      },
-      {
-        level: 5,
-        moleCount: 6,
-        spawnInterval: 0.6, // multiplier
-        moleLifetime: 1200, // milliseconds
-        misses: 0
-      }
-    ];
-    
-    // Mole types
-    const MOLE_TYPES = [
-      { id: 'standard', points: 10, speed: 1.0, scale: 0.2, probability: 0.7 },
-      { id: 'fast', points: 20, speed: 1.5, scale: 0.15, probability: 0.2 },
-      { id: 'big', points: 5, speed: 0.7, scale: 0.3, probability: 0.1 }
-    ];
-    
-    // Utility functions
-    function log(message) {
-      if (DEBUG) {
-        console.log(message);
-        const debugPanel = document.getElementById('debug-panel');
-        if (debugPanel) {
-          debugPanel.style.display = 'block';
-          const entry = document.createElement('div');
-          entry.textContent = message;
-          debugPanel.appendChild(entry);
-          // Keep only last 20 messages
-          while (debugPanel.childElementCount > 20) {
-            debugPanel.removeChild(debugPanel.firstChild);
-          }
-          // Scroll to bottom
-          debugPanel.scrollTop = debugPanel.scrollHeight;
-        }
-      }
-    }
-    
-    function getRandomInt(min, max) {
-      return Math.floor(Math.random() * (max - min + 1)) + min;
-    }
-    
-    function getRandomFloat(min, max) {
-      return Math.random() * (max - min) + min;
-    }
-    
-    function getRandomItem(array, probabilityProp = null) {
-      if (!array || array.length === 0) return null;
-      
-      if (probabilityProp) {
-        // Get items based on probability
-        const totalProbability = array.reduce((sum, item) => sum + item[probabilityProp], 0);
-        let random = Math.random() * totalProbability;
+    <a-scene embedded ar vr-mode-ui="enabled: false">
+        <!-- Assets (none external, all programmatically generated) -->
+        <a-assets>
+            <!-- We'll use A-Frame primitives instead of external models -->
+        </a-assets>
         
-        for (const item of array) {
-          random -= item[probabilityProp];
-          if (random <= 0) {
-            return item;
-          }
+        <!-- Entities -->
+        <a-entity id="camera" camera position="0 1.6 0" wasd-controls look-controls>
+            <a-entity id="startUI" position="0 0 -1" text="value: Point your controller at the floor and pull the trigger to start. Shoot gophers to score points!; width: 1; align: center;" visible="true"></a-entity>
+            <a-entity id="gameOverUI" position="0 0 -1" text="value: Game Over!\nFinal Score: 0\nPull trigger to restart; width: 1; align: center;" visible="false"></a-entity>
+        </a-entity>
+        
+        <!-- Controllers -->
+        <a-entity id="leftHand" hand-controls="hand: left" gun></a-entity>
+        <a-entity id="rightHand" hand-controls="hand: right" gun></a-entity>
+        
+        <!-- Game area (will be positioned at floor level once marked) -->
+        <a-entity id="gameArea" visible="false">
+            <!-- Ground marker -->
+            <a-plane id="floor" rotation="-90 0 0" width="3" height="3" color="#a3815f" opacity="0.5"></a-plane>
+            
+            <!-- Scoreboard -->
+            <a-entity id="scoreboard" position="0 0.1 -1" rotation="-90 0 0" look-at="[camera]">
+                <a-plane width="1" height="0.5" color="#222" opacity="0.8">
+                    <a-text id="scoreText" position="-0.45 0.15 0.01" value="Score: 0" color="white"></a-text>
+                    <a-text id="timeText" position="-0.45 -0.05 0.01" value="Time: 60" color="white"></a-text>
+                    <a-text id="powerupText" position="-0.45 -0.25 0.01" value="" color="white"></a-text>
+                </a-plane>
+            </a-entity>
+            
+            <!-- Gopher area (3m x 3m) - gophers will be spawned here -->
+        </a-entity>
+        
+        <!-- Object pools for performance (will be populated in JavaScript) -->
+        <a-entity id="gopherPool"></a-entity>
+        <a-entity id="projectilePool"></a-entity>
+        <a-entity id="explosionPool"></a-entity>
+        <a-entity id="powerupPool"></a-entity>
+    </a-scene>
+    
+    <script>
+        // Game state and configuration
+        const gameState = {
+            isPlaying: false,
+            score: 0,
+            timeRemaining: 60,
+            floorMarked: false,
+            scoreMultiplier: 1,
+            slowGophers: false,
+            powerupTimeRemaining: 0,
+            powerupType: null,
+            activeGophers: [],
+            activeProjectiles: [],
+            explosions: [],
+            powerups: []
+        };
+        
+        // Configuration values
+        const config = {
+            gopherSpawnInterval: [1000, 3000], // 1-3 seconds in ms
+            gopherLifetime: 2000, // 2 seconds in ms
+            maxGophers: 10,
+            maxProjectiles: 10,
+            projectileSpeed: 10, // 10 m/s
+            projectileLifetime: 2000, // 2 seconds in ms
+            powerupChance: 0.2, // 20% chance per spawn check
+            powerupSpawnInterval: [10000, 15000], // 10-15 seconds in ms
+            powerupDuration: 10000, // 10 seconds in ms
+            gameTime: 60000, // 60 seconds in ms
+            gopherSpawnArea: 3, // 3m x 3m area
+            gopherTypes: {
+                basic: { color: 'brown', points: 10, speed: 1, chance: 0.7 },
+                fast: { color: 'green', points: 20, speed: 1.5, chance: 0.2 },
+                rare: { color: 'gold', points: 50, speed: 1, chance: 0.1 }
+            },
+            powerupTypes: {
+                doubleScore: { color: 'red', effect: 'doubleScore' },
+                slowGophers: { color: 'blue', effect: 'slowGophers' }
+            }
+        };
+        
+        // Object pools (for better performance)
+        const pools = {
+            gophers: [],
+            projectiles: [],
+            explosions: [],
+            powerups: []
+        };
+        
+        // Sound generation with Web Audio API
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Generate a simple audio tone
+        function generateTone(frequency, duration, type = 'sine') {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.type = type;
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Fade out
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + duration);
         }
-        return array[0]; // Fallback
-      } else {
-        // Simple random selection
-        return array[Math.floor(Math.random() * array.length)];
-      }
-    }
-    
-    // Initialize the application
-    function init() {
-      log('Initializing application');
-      
-      // Set up THREE.js scene
-      container = document.getElementById('container');
-      scene = new THREE.Scene();
-      
-      // Set up camera
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-      
-      // Set up lighting
-      const ambientLight = new THREE.AmbientLight(0x404040, 2);
-      scene.add(ambientLight);
-      
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-      directionalLight.position.set(1, 1, 1).normalize();
-      scene.add(directionalLight);
-      
-      // Set up renderer
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      container.appendChild(renderer.domElement);
-      
-      // Raycaster for interactions
-      raycaster = new THREE.Raycaster();
-      tempMatrix = new THREE.Matrix4();
-      
-      // Create floor reticle
-      const reticleGeometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
-      const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0x0080ff });
-      floorReticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
-      floorReticle.visible = false;
-      scene.add(floorReticle);
-      
-      // Create floor grid
-      const gridHelper = new THREE.GridHelper(4, 10, 0x808080, 0x808080);
-      gridHelper.name = 'floorGrid';
-      gridHelper.visible = false;
-      scene.add(gridHelper);
-      
-      // Add AR button
-      document.getElementById('ar-button').addEventListener('click', startAR);
-      
-      // Set version number
-      document.getElementById('version-info').textContent = `Version ${GAME_VERSION}`;
-      
-      // Load models
-      loadModels();
-      
-      // Handle window resize
-      window.addEventListener('resize', onWindowResize, false);
-      
-      // Start rendering
-      renderer.setAnimationLoop(render);
-      
-      log('Initialization complete');
-    }
-    
-    // Handle window resize
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-    
-    // Start AR session
-    function startAR() {
-      log('AR button clicked, checking for WebXR support...');
-      
-      if (!navigator.xr) {
-        log('ERROR: WebXR not supported on this browser');
-        alert('WebXR not supported on this browser');
-        return;
-      }
-      
-      navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-        if (supported) {
-          log('AR is supported, requesting session...');
-          
-          // Get the UI container element
-          const uiContainer = document.getElementById('ui-container');
-          
-          // Basic session options without DOM overlay
-          const sessionOptions = {
-            requiredFeatures: ['hit-test']
-          };
-          
-          // Add DOM overlay as optional if the UI container exists
-          if (uiContainer) {
-            sessionOptions.optionalFeatures = ['dom-overlay'];
-            sessionOptions.domOverlay = { root: uiContainer };
-            log('DOM overlay configured with ui-container');
-          } else {
-            log('WARNING: UI container not found, continuing without DOM overlay');
-          }
-          
-          navigator.xr.requestSession('immersive-ar', sessionOptions)
-            .then(onSessionStarted)
-            .catch(error => {
-              log('ERROR starting AR session: ' + error.message);
-              
-              // Try again without DOM overlay if that was the issue
-              if (error.message.includes('domOverlay') || error.message.includes('Element')) {
-                log('Trying again without DOM overlay...');
+        
+        // Sound effects
+        const sounds = {
+            shoot: () => generateTone(500, 0.1, 'square'),
+            hit: () => generateTone(300, 0.2, 'sine'),
+            powerup: () => {
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                osc.connect(gain);
+                gain.connect(audioContext.destination);
                 
-                navigator.xr.requestSession('immersive-ar', {
-                  requiredFeatures: ['hit-test']
-                }).then(onSessionStarted)
-                .catch(finalError => {
-                  log('FINAL ERROR: ' + finalError.message);
-                  alert('Failed to start AR: ' + finalError.message);
-                });
-              } else {
-                alert('Failed to start AR: ' + error.message);
-              }
+                osc.frequency.setValueAtTime(300, audioContext.currentTime);
+                osc.frequency.linearRampToValueAtTime(600, audioContext.currentTime + 0.5);
+                
+                gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                osc.start();
+                osc.stop(audioContext.currentTime + 0.5);
+            }
+        };
+        
+        // A-Frame component for the gun
+        AFRAME.registerComponent('gun', {
+            init: function() {
+                // Create gun model
+                const handle = document.createElement('a-box');
+                handle.setAttribute('position', '0 0 0');
+                handle.setAttribute('width', '0.1');
+                handle.setAttribute('height', '0.1');
+                handle.setAttribute('depth', '0.05');
+                handle.setAttribute('color', '#444');
+                
+                const barrel = document.createElement('a-cylinder');
+                barrel.setAttribute('position', '0 0 -0.15');
+                barrel.setAttribute('rotation', '90 0 0');
+                barrel.setAttribute('height', '0.2');
+                barrel.setAttribute('radius', '0.02');
+                barrel.setAttribute('color', '#333');
+                
+                // Add to gun entity
+                this.el.appendChild(handle);
+                this.el.appendChild(barrel);
+                
+                // Set up shooting
+                this.el.addEventListener('triggerdown', this.shoot.bind(this));
+                
+                // For floor marking
+                if (!gameState.floorMarked) {
+                    this.el.addEventListener('triggerdown', this.markFloor.bind(this));
+                }
+                
+                // For game restart
+                this.el.addEventListener('triggerdown', this.restartGame.bind(this));
+            },
+            
+            shoot: function() {
+                if (!gameState.isPlaying || !gameState.floorMarked) return;
+                
+                // Limit active projectiles
+                if (gameState.activeProjectiles.length >= config.maxProjectiles) return;
+                
+                // Play sound
+                sounds.shoot();
+                
+                // Get projectile from pool or create new one
+                let projectile;
+                const projectilePool = document.querySelector('#projectilePool');
+                
+                if (pools.projectiles.length > 0) {
+                    projectile = pools.projectiles.pop();
+                    projectile.setAttribute('visible', true);
+                } else {
+                    projectile = document.createElement('a-sphere');
+                    projectile.setAttribute('radius', 0.02);
+                    projectile.setAttribute('color', 'white');
+                    projectile.setAttribute('material', 'emissive: white; emissiveIntensity: 0.5');
+                    projectilePool.appendChild(projectile);
+                }
+                
+                // Position at gun barrel
+                const gunWorldPosition = new THREE.Vector3();
+                const gunWorldRotation = new THREE.Quaternion();
+                this.el.object3D.getWorldPosition(gunWorldPosition);
+                this.el.object3D.getWorldQuaternion(gunWorldRotation);
+                
+                // Set projectile position
+                projectile.setAttribute('position', gunWorldPosition);
+                
+                // Get direction
+                const direction = new THREE.Vector3(0, 0, -1);
+                direction.applyQuaternion(gunWorldRotation);
+                direction.normalize();
+                
+                // Add to active projectiles with velocity
+                const projectileData = {
+                    element: projectile,
+                    velocity: direction.multiplyScalar(config.projectileSpeed),
+                    createdAt: Date.now()
+                };
+                
+                gameState.activeProjectiles.push(projectileData);
+            },
+            
+            markFloor: function(event) {
+                if (gameState.floorMarked) return;
+                
+                // Use controller position and rotation to cast a ray downward
+                const controller = this.el.object3D;
+                const position = new THREE.Vector3();
+                controller.getWorldPosition(position);
+                
+                const direction = new THREE.Vector3(0, -1, 0); // Down
+                
+                // Mark floor at y=0 (simplified - real implementation would raycast)
+                position.y = 0;
+                
+                // Position game area
+                const gameArea = document.querySelector('#gameArea');
+                gameArea.setAttribute('position', `${position.x} 0 ${position.z}`);
+                gameArea.setAttribute('visible', true);
+                
+                // Hide start UI
+                document.querySelector('#startUI').setAttribute('visible', false);
+                
+                // Mark floor as set and start game
+                gameState.floorMarked = true;
+                startGame();
+                
+                // Remove this floor marking event listener
+                this.el.removeEventListener('triggerdown', this.markFloor);
+            },
+            
+            restartGame: function() {
+                if (gameState.isPlaying || !gameState.floorMarked) return;
+                
+                // Reset game state
+                gameState.score = 0;
+                gameState.timeRemaining = 60;
+                gameState.scoreMultiplier = 1;
+                gameState.slowGophers = false;
+                gameState.powerupTimeRemaining = 0;
+                gameState.powerupType = null;
+                
+                // Clean up entities
+                returnAllToPool();
+                
+                // Hide game over UI
+                document.querySelector('#gameOverUI').setAttribute('visible', false);
+                
+                // Start new game
+                startGame();
+            }
+        });
+        
+        // Start the game
+        function startGame() {
+            gameState.isPlaying = true;
+            gameState.score = 0;
+            gameState.timeRemaining = 60;
+            gameState.scoreMultiplier = 1;
+            gameState.slowGophers = false;
+            
+            // Update scoreboard
+            updateScoreboard();
+            
+            // Start game loop
+            gameLoop();
+            
+            // Start spawning gophers
+            scheduleNextGopherSpawn();
+            
+            // Start spawning powerups
+            scheduleNextPowerupSpawn();
+            
+            // Start countdown timer
+            const startTime = Date.now();
+            const timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                gameState.timeRemaining = Math.max(0, config.gameTime / 1000 - elapsed);
+                
+                if (gameState.timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    endGame();
+                }
+                
+                // Update powerup timers
+                if (gameState.powerupTimeRemaining > 0) {
+                    gameState.powerupTimeRemaining -= 1;
+                    if (gameState.powerupTimeRemaining <= 0) {
+                        // Reset powerup effects
+                        gameState.scoreMultiplier = 1;
+                        gameState.slowGophers = false;
+                        gameState.powerupType = null;
+                    }
+                }
+                
+                updateScoreboard();
+            }, 1000);
+        }
+        
+        // End the game
+        function endGame() {
+            gameState.isPlaying = false;
+            
+            // Show game over UI
+            const gameOverUI = document.querySelector('#gameOverUI');
+            gameOverUI.setAttribute('text', `value: Game Over!\nFinal Score: ${gameState.score}\nPull trigger to restart; width: 1; align: center;`);
+            gameOverUI.setAttribute('visible', true);
+            
+            // Return all entities to pool
+            returnAllToPool();
+        }
+        
+        // Return all active entities to their respective pools
+        function returnAllToPool() {
+            // Return gophers to pool
+            gameState.activeGophers.forEach(gopher => {
+                gopher.element.setAttribute('visible', false);
+                pools.gophers.push(gopher.element);
             });
-        } else {
-          log('ERROR: AR not supported on this device');
-          alert('AR not supported on this device');
-        }
-      }).catch(error => {
-        log('ERROR checking AR support: ' + error.message);
-        alert('Error checking AR support: ' + error.message);
-      });
-    }
-    
-    // When AR session starts
-    function onSessionStarted(session) {
-      log('AR session started');
-      xrSession = session;
-      
-      // Hide start screen
-      document.getElementById('start-screen').classList.add('hidden');
-      
-      // Set up session
-      session.addEventListener('end', onSessionEnded);
-      session.addEventListener('select', onSelect);
-      
-      // Set up renderer for XR
-      renderer.xr.setReferenceSpaceType('local');
-      renderer.xr.setSession(session);
-      
-      // Set up controllers
-      controller1 = renderer.xr.getController(0);
-      controller1.addEventListener('selectstart', onSelectStart);
-      controller1.addEventListener('selectend', onSelectEnd);
-      scene.add(controller1);
-      
-      controller2 = renderer.xr.getController(1);
-      controller2.addEventListener('selectstart', onSelectStart);
-      controller2.addEventListener('selectend', onSelectEnd);
-      scene.add(controller2);
-      
-      // Start hit testing once reference space is available
-      session.requestReferenceSpace('viewer').then((referenceSpace) => {
-        xrSession.requestHitTestSource({ space: referenceSpace }).then((source) => {
-          hitTestSource = source;
-        });
-      });
-      
-      session.requestReferenceSpace('local').then((referenceSpace) => {
-        xrReferenceSpace = referenceSpace;
-        
-        // Create instruction text
-        createInstructionText('Find a flat surface and tap to place the game');
-      });
-      
-      // Create menu once models are loaded
-      if (modelCount === totalModels) {
-        createMenu();
-      } else {
-        // Show loading screen until models are loaded
-        document.getElementById('loading-screen').style.display = 'flex';
-      }
-    }
-    
-    // Create text instructions in 3D space
-    function createInstructionText(message) {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = 512;
-      canvas.height = 256;
-      
-      context.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      
-      context.font = '40px Arial';
-      context.fillStyle = 'white';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(message, canvas.width / 2, canvas.height / 2);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.MeshBasicMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 0.8
-      });
-      
-      const geometry = new THREE.PlaneGeometry(1, 0.5);
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.name = 'instruction-text';
-      mesh.position.set(0, 0, -1);
-      
-      const textGroup = new THREE.Group();
-      textGroup.add(mesh);
-      textGroup.position.set(0, 0, -1);
-      textGroup.name = 'instruction-text';
-      
-      scene.add(textGroup);
-      
-      return textGroup;
-    }
-    
-    // Handle session end
-    function onSessionEnded() {
-      log('AR session ended');
-      xrSession = null;
-      hitTestSource = null;
-      hitTestSourceRequested = false;
-      
-      // Reset game state
-      endGame();
-      
-      // Show start screen again
-      document.getElementById('start-screen').classList.remove('hidden');
-    }
-    
-    // Handle select start (trigger press)
-    function onSelectStart(event) {
-      const controller = event.target;
-      controller.userData.isSelecting = true;
-      
-      if (gameActive) {
-        fireProjectile(controller);
-      }
-    }
-    
-    // Handle select end (trigger release)
-    function onSelectEnd(event) {
-      const controller = event.target;
-      controller.userData.isSelecting = false;
-    }
-    
-    // Handle select event (tap)
-    function onSelect(event) {
-      if (floorReticle.visible && !gameActive) {
-        // Place the floor at the reticle position and start the game
-        placeFloor(floorReticle.position.y);
-        // Hide the reticle after floor placement
-        floorReticle.visible = false;
-        // Don't start game automatically - just show menu
-        // Menu interaction will handle game start with proper game mode
-      } else if (gameActive === false && menuBoard && menuBoard.visible) {
-        // Check for menu button interactions
-        const controller = event.target;
-        
-        // Set up raycaster from controller
-        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-        tempMatrix.identity().extractRotation(controller.matrixWorld);
-        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-        
-        // Get intersections with menu buttons
-        const menuButtons = [];
-        menuBoard.traverse(child => {
-          if (child.userData && child.userData.onClick) {
-            menuButtons.push(child);
-          }
-        });
-        
-        const intersects = raycaster.intersectObjects(menuButtons, true);
-        if (intersects.length > 0) {
-          // Find the actual button object (might be a child mesh that was intersected)
-          let selectedButton = intersects[0].object;
-          while (selectedButton && !selectedButton.userData.onClick) {
-            selectedButton = selectedButton.parent;
-          }
-          
-          if (selectedButton && selectedButton.userData.onClick) {
-            // Call the stored click handler
-            selectedButton.userData.onClick();
+            gameState.activeGophers = [];
             
-            // Provide feedback
-            triggerHapticFeedback(controller);
-            createSound('hit');
-          }
-        }
-      }
-    }
-    
-    // Load game models
-    function loadModels() {
-      log('Loading models...');
-      document.getElementById('loading-screen').style.display = 'flex';
-      
-      const loadingText = document.getElementById('loading-text');
-      const progressBar = document.getElementById('progress');
-      
-      // Create a simple mole model
-      createSimpleMoleModel('standard', 0x8B4513);
-      createSimpleMoleModel('fast', 0xFF0000);
-      createSimpleMoleModel('big', 0x8B4513);
-      
-      // Create a simple projectile model
-      createSimpleProjectileModel();
-      
-      // Create a simple power-up model
-      createSimplePowerUpModel();
-      
-      function updateLoadingProgress() {
-        modelCount++;
-        const progress = (modelCount / totalModels) * 100;
-        progressBar.style.width = `${progress}%`;
-        loadingText.textContent = `Loading models: ${modelCount}/${totalModels}`;
-        
-        if (modelCount === totalModels) {
-          document.getElementById('loading-screen').style.display = 'none';
-          log('All models loaded');
-          
-          // Create menu if session has already started
-          if (xrSession) {
-            createMenu();
-          }
-        }
-      }
-      
-      function createSimpleMoleModel(type, color) {
-        // Create a simple mole model with basic geometry
-        const group = new THREE.Group();
-        
-        // Body
-        const bodyGeometry = new THREE.SphereGeometry(0.5, 32, 16);
-        const bodyMaterial = new THREE.MeshStandardMaterial({ color });
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        body.position.y = 0.25;
-        group.add(body);
-        
-        // Eyes
-        const eyeGeometry = new THREE.SphereGeometry(0.08, 16, 8);
-        const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
-        
-        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-        leftEye.position.set(0.2, 0.35, 0.4);
-        group.add(leftEye);
-        
-        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-        rightEye.position.set(-0.2, 0.35, 0.4);
-        group.add(rightEye);
-        
-        // Pupils
-        const pupilGeometry = new THREE.SphereGeometry(0.04, 8, 8);
-        const pupilMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
-        
-        const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-        leftPupil.position.set(0.2, 0.35, 0.48);
-        group.add(leftPupil);
-        
-        const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-        rightPupil.position.set(-0.2, 0.35, 0.48);
-        group.add(rightPupil);
-        
-        // Nose
-        const noseGeometry = new THREE.SphereGeometry(0.1, 16, 8);
-        const noseMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
-        const nose = new THREE.Mesh(noseGeometry, noseMaterial);
-        nose.position.set(0, 0.2, 0.48);
-        group.add(nose);
-        
-        // Add to models
-        models[type] = {
-          object: group
-        };
-        
-        updateLoadingProgress();
-      }
-      
-      function createSimpleProjectileModel() {
-        // Create a simple projectile model
-        const geometry = new THREE.SphereGeometry(GAME_CONFIG.projectile.size, 16, 8);
-        const material = new THREE.MeshStandardMaterial({ 
-          color: 0xFFFF00,
-          emissive: 0xFFFF00,
-          emissiveIntensity: 0.5
-        });
-        const sphere = new THREE.Mesh(geometry, material);
-        
-        models.projectile = {
-          object: sphere
-        };
-        
-        updateLoadingProgress();
-      }
-      
-      function createSimplePowerUpModel() {
-        // Create a simple power-up model (rotating cube)
-        const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
-        const material = new THREE.MeshStandardMaterial({ 
-          color: 0x00FFFF,
-          emissive: 0x00FFFF,
-          emissiveIntensity: 0.5,
-          transparent: true,
-          opacity: 0.8
-        });
-        const cube = new THREE.Mesh(geometry, material);
-        
-        models.powerUp = {
-          object: cube
-        };
-        
-        updateLoadingProgress();
-      }
-    }
-    
-    // Place floor at the given Y position
-    function placeFloor(yPosition) {
-      floorY = yPosition;
-      log(`Floor placed at y=${floorY}`);
-      
-      // Show the floor grid
-      const floorGrid = scene.getObjectByName('floorGrid');
-      if (floorGrid) {
-        floorGrid.position.y = floorY;
-        floorGrid.visible = true;
-        log('Floor grid visible');
-      }
-      
-      // Show additional visual marker for the floor
-      createFloorMarker(floorY);
-      
-      // Hide the reticle
-      floorReticle.visible = false;
-      
-      // Remove any instruction text
-      scene.children.forEach(child => {
-        if (child.name === 'instruction-text') {
-          scene.remove(child);
-        }
-      });
-      
-      // Initialize the game
-      initializeGame();
-    }
-    
-    // Create a visual marker for the floor
-    function createFloorMarker(y) {
-      // Create a circular marker for the floor
-      const markerGeometry = new THREE.CircleGeometry(2, 32);
-      const markerMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0x4080ff, 
-        transparent: true, 
-        opacity: 0.3,
-        side: THREE.DoubleSide 
-      });
-      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-      marker.rotation.x = -Math.PI / 2; // Make it horizontal
-      marker.position.set(0, y + 0.01, 0); // Just above floor level
-      marker.name = 'floor-marker';
-      scene.add(marker);
-    }
-    
-    // Create game menu
-    function createMenu() {
-      log('Creating game menu');
-      
-      // Create a menu board
-      menuBoard = new THREE.Group();
-      menuBoard.name = 'menu-board';
-      scene.add(menuBoard);
-      
-      // Create a background plane
-      const { menuWidth, menuHeight } = GAME_CONFIG.ui;
-      const menuGeometry = new THREE.PlaneGeometry(menuWidth, menuHeight);
-      const menuMaterial = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        transparent: true,
-        opacity: 0.7,
-        side: THREE.DoubleSide
-      });
-      const menuPane = new THREE.Mesh(menuGeometry, menuMaterial);
-      menuBoard.add(menuPane);
-      
-      // Create title text
-      createMenuText('Select Game Mode', 0, menuHeight / 2 - 0.03, 0.02, menuBoard);
-      
-      // Create buttons for each game mode
-      let yOffset = menuHeight / 2 - 0.08;
-      Object.entries(GAME_MODES).forEach(([modeId, mode], index) => {
-        yOffset -= 0.06;
-        const button = createMenuButton(mode.name, 0, yOffset, 0.15, 0.04, () => {
-          startGame(modeId);
-        });
-        menuBoard.add(button);
-        
-        createMenuText(mode.description, 0, yOffset - 0.035, 0.012, menuBoard, 0xCCCCCC);
-        
-        yOffset -= 0.03;
-      });
-      
-      // Version text at bottom
-      createMenuText(`Version ${GAME_VERSION}`, 0, -menuHeight / 2 + 0.02, 0.012, menuBoard, 0x888888);
-      
-      updateMenuPosition();
-      log('Menu created');
-    }
-    
-    // Create text for the menu
-    function createMenuText(message, x, y, size, parent, color = 0xFFFFFF) {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = 512;
-      canvas.height = 128;
-      
-      context.fillStyle = 'rgba(0, 0, 0, 0)';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      
-      context.font = 'bold 48px Arial';
-      context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(message, canvas.width / 2, canvas.height / 2);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.MeshBasicMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 1
-      });
-      
-      const textWidth = size * 5;
-      const textHeight = size * 1.25;
-      const geometry = new THREE.PlaneGeometry(textWidth, textHeight);
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(x, y, 0.001);
-      
-      parent.add(mesh);
-      return mesh;
-    }
-    
-    // Create a button for the menu
-    function createMenuButton(text, x, y, width, height, onClick) {
-      const group = new THREE.Group();
-      group.position.set(x, y, 0);
-      
-      // Button background
-      const geometry = new THREE.PlaneGeometry(width, height);
-      const material = new THREE.MeshBasicMaterial({
-        color: 0x3498db,
-        transparent: true,
-        opacity: 0.9
-      });
-      const background = new THREE.Mesh(geometry, material);
-      background.position.z = 0.001;
-      group.add(background);
-      
-      // Button text
-      const textMesh = createMenuText(text, 0, 0, height * 0.5, group);
-      textMesh.position.z = 0.002;
-      
-      // Store click handler
-      group.userData = { onClick };
-      
-      return group;
-    }
-    
-    // Update menu position relative to camera
-    function updateMenuPosition() {
-      if (!menuBoard) return;
-      
-      const cameraPos = new THREE.Vector3();
-      camera.getWorldPosition(cameraPos);
-      
-      // Position menu in front of player but closer to floor level
-      menuBoard.position.x = cameraPos.x;
-      menuBoard.position.y = Math.max(floorY + 0.8, cameraPos.y - 0.5); // Positioned above floor
-      menuBoard.position.z = cameraPos.z - 1;
-      
-      // Make menu face the camera
-      menuBoard.lookAt(cameraPos.x, menuBoard.position.y, cameraPos.z);
-    }
-    
-    // Initialize the game
-    function initializeGame() {
-      log('Initializing game');
-      
-      // Create scoreboard
-      createScoreBoard();
-      
-      // Hide the loading screen
-      document.getElementById('loading-screen').style.display = 'none';
-      
-      // Initialize sound pool
-      initSoundPool();
-      
-      // Show menu
-      if (menuBoard) {
-        menuBoard.visible = true;
-        updateMenuPosition();
-      }
-    }
-    
-    // Create the scoreboard
-    function createScoreBoard() {
-      const { scoreBoardWidth, scoreBoardHeight } = GAME_CONFIG.ui;
-      
-      // Create a group for the scoreboard
-      scoreBoard = new THREE.Group();
-      scoreBoard.position.set(0, 0.7, -1.5); // CHANGED: Lower position (0.7m above floor)
-      scoreBoard.visible = false;
-      scene.add(scoreBoard);
-      
-      // Rotate the scoreboard to be angled up slightly for better visibility
-      scoreBoard.rotation.x = -Math.PI / 8; // Tilt upward slightly
-      
-      // Create a background panel
-      const geometry = new THREE.PlaneGeometry(scoreBoardWidth, scoreBoardHeight);
-      const material = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        transparent: true,
-        opacity: 0.7,
-        side: THREE.DoubleSide
-      });
-      const background = new THREE.Mesh(geometry, material);
-      scoreBoard.add(background);
-      
-      // Add methods to update the score
-      scoreBoard.updateScore = function(newScore, timeLeft, multiplier) {
-        // Update or create score text
-        if (this.scoreText) {
-          this.remove(this.scoreText);
-        }
-        
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.width = 512;
-        canvas.height = 128;
-        
-        context.fillStyle = 'rgba(0, 0, 0, 0)';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        
-        context.font = 'bold 28px Arial';
-        context.fillStyle = 'white';
-        context.textAlign = 'center';
-        context.textBaseline = 'middle';
-        
-        let textContent = `Score: ${newScore}`;
-        if (multiplier > 1) {
-          textContent += ` (x${multiplier})`;
-        }
-        
-        context.fillText(textContent, canvas.width / 2, 40);
-        
-        if (timeLeft !== undefined) {
-          // Format time as MM:SS
-          const minutes = Math.floor(timeLeft / 60);
-          const seconds = Math.floor(timeLeft % 60);
-          const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-          
-          context.fillText(`Time: ${formattedTime}`, canvas.width / 2, 80);
-        }
-        
-        const texture = new THREE.CanvasTexture(canvas);
-        const material = new THREE.MeshBasicMaterial({
-          map: texture,
-          transparent: true,
-          opacity: 1
-        });
-        
-        const geometry = new THREE.PlaneGeometry(scoreBoardWidth * 0.9, scoreBoardHeight * 0.8);
-        this.scoreText = new THREE.Mesh(geometry, material);
-        this.scoreText.position.z = 0.01;
-        this.add(this.scoreText);
-      };
-      
-      log('Scoreboard created');
-    }
-    
-    // Initialize sound pool
-    function initSoundPool() {
-      // Create audio elements for each sound type
-      const sounds = ['fire', 'hit', 'explosion', 'powerUp', 'pop', 'miss', 'gameOver'];
-      
-      sounds.forEach(soundType => {
-        soundPool[soundType] = [];
-        
-        // Create multiple instances for each sound
-        for (let i = 0; i < 3; i++) {
-          const sound = new Audio();
-          sound.volume = 0.5;
-          
-          // Set source based on sound type (URLs would be actual audio files in a real implementation)
-          // Here we're using the Web Audio API to generate simple sounds
-          sound.addEventListener('play', () => {
-            generateSound(soundType, sound);
-          });
-          
-          soundPool[soundType].push(sound);
-        }
-      });
-    }
-    
-    // Generate simple sounds using Web Audio API
-    function generateSound(type, audioElement) {
-      if (!soundEnabled || !audioElement) return;
-      
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const gainNode = audioContext.createGain();
-      gainNode.connect(audioContext.destination);
-      
-      const oscillator = audioContext.createOscillator();
-      oscillator.connect(gainNode);
-      
-      // Configure sound based on type
-      switch (type) {
-        case 'fire':
-          oscillator.type = 'triangle';
-          oscillator.frequency.value = 440;
-          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-          oscillator.start();
-          oscillator.stop(audioContext.currentTime + 0.2);
-          break;
-          
-        case 'hit':
-          oscillator.type = 'square';
-          oscillator.frequency.value = 300;
-          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-          oscillator.start();
-          oscillator.stop(audioContext.currentTime + 0.2);
-          break;
-          
-        case 'explosion':
-          oscillator.type = 'sawtooth';
-          oscillator.frequency.value = 100;
-          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-          oscillator.start();
-          oscillator.stop(audioContext.currentTime + 0.3);
-          break;
-          
-        case 'powerUp':
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-          oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.2);
-          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-          oscillator.start();
-          oscillator.stop(audioContext.currentTime + 0.3);
-          break;
-          
-        case 'pop':
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-          oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.1);
-          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-          oscillator.start();
-          oscillator.stop(audioContext.currentTime + 0.2);
-          break;
-          
-        case 'miss':
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-          oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.2);
-          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-          oscillator.start();
-          oscillator.stop(audioContext.currentTime + 0.2);
-          break;
-          
-        case 'gameOver':
-          oscillator.type = 'triangle';
-          oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-          oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.5);
-          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-          oscillator.start();
-          oscillator.stop(audioContext.currentTime + 0.5);
-          break;
-      }
-      
-      // Clean up the audio context when done
-      oscillator.onended = () => {
-        audioContext.close();
-      };
-    }
-    
-    // Play a sound
-    function createSound(type) {
-      if (!soundEnabled || !soundPool[type]) return;
-      
-      // Find an audio element that's not currently playing
-      for (const sound of soundPool[type]) {
-        if (sound.paused || sound.ended) {
-          sound.currentTime = 0;
-          sound.play().catch(e => log(`Error playing sound: ${e}`));
-          return;
-        }
-      }
-      
-      // If all are playing, use the first one
-      if (soundPool[type].length > 0) {
-        const sound = soundPool[type][0];
-        sound.currentTime = 0;
-        sound.play().catch(e => log(`Error playing sound: ${e}`));
-      }
-    }
-    
-    // Trigger haptic feedback on controller
-    function triggerHapticFeedback(controller) {
-      if (!hapticFeedbackEnabled || !controller || !controller.gamepad) return;
-      
-      try {
-        const gamepad = controller.gamepad;
-        if (gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
-          gamepad.hapticActuators[0].pulse(0.8, 100);
-        }
-      } catch (error) {
-        log(`Haptic feedback error: ${error.message}`);
-      }
-    }
-    
-    // Start the game with the selected mode
-    function startGame(gameMode) {
-      log(`Starting game in ${gameMode} mode`);
-      
-      // Set game mode
-      currentGameMode = gameMode;
-      currentDifficulty = { ...DIFFICULTY_LEVELS[0] };
-      
-      // Reset game state
-      score = 0;
-      scoreMultiplier = 1;
-      speedMultiplier = 1;
-      moles = [];
-      projectiles = [];
-      powerUps = [];
-      activePowerUps = {};
-      floorSelected = false;
-      
-      // Clear any existing timers
-      if (gameTimer) clearInterval(gameTimer);
-      
-      // Set time based on game mode
-      timeRemaining = GAME_MODES[gameMode].timeLimit ? GAME_MODES[gameMode].timeLimit / 1000 : 0;
-      
-      // Hide menu
-      if (menuBoard) {
-        menuBoard.visible = false;
-      }
-      
-      // Show scoreboard
-      if (scoreBoard) {
-        scoreBoard.visible = true;
-        scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-        
-        // Position scoreboard at floor level
-        const playerPosition = new THREE.Vector3();
-        camera.getWorldPosition(playerPosition);
-        
-        // Force a very specific position - directly in front of player, just above floor
-        scoreBoard.position.set(
-          playerPosition.x,  // Same x as player
-          floorY + 0.4,      // Just 0.4 meters above floor - very low
-          playerPosition.z - 1.2  // Slightly closer to player
-        );
-        
-        // Tilt it up to be visible
-        scoreBoard.rotation.set(-Math.PI/4, 0, 0);
-        
-        log(`Positioned scoreboard at y=${scoreBoard.position.y}, floor=${floorY}`);
-      }
-      
-      // Start game logic
-      gameActive = true;
-      
-      // Start spawning moles
-      spawnMoles();
-      
-      // Start spawning power-ups
-      spawnPowerUps();
-      
-      // Start game timer based on mode
-      if (GAME_MODES[gameMode].timeLimit) {
-        gameTimer = setInterval(() => {
-          timeRemaining -= 0.1; // Update every 100ms
-          
-          // Check if game over
-          if (timeRemaining <= 0) {
-            endGame();
-            return;
-          }
-          
-          // Update scoreboard
-          if (scoreBoard) {
-            scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-          }
-        }, 100);
-      }
-      
-      // Start increasing difficulty over time
-      if (GAME_MODES[gameMode].difficultyIncrease) {
-        const difficultyInterval = setInterval(() => {
-          if (!gameActive) {
-            clearInterval(difficultyInterval);
-            return;
-          }
-          
-          // Move to next difficulty level if available
-          const nextLevel = currentDifficulty.level;
-          if (nextLevel < DIFFICULTY_LEVELS.length) {
-            currentDifficulty = { ...DIFFICULTY_LEVELS[nextLevel] };
-            log(`Increased difficulty to level ${currentDifficulty.level}`);
-          }
-        }, GAME_MODES[gameMode].difficultyIncrease);
-      }
-    }
-    
-    // End the game
-    function endGame() {
-      log('Game ended');
-      
-      gameActive = false;
-      
-      // Clear any timers
-      if (gameTimer) clearInterval(gameTimer);
-      
-      // Clear all game objects
-      clearGameObjects();
-      
-      // Play game over sound
-      createSound('gameOver');
-      
-      // Show game over screen
-      showGameOverScreen();
-    }
-    
-    // Clear all game objects
-    function clearGameObjects() {
-      // Remove all moles
-      moles.forEach(mole => {
-        if (mole.object) scene.remove(mole.object);
-      });
-      moles = [];
-      
-      // Remove all projectiles
-      projectiles.forEach(projectile => {
-        if (projectile.object) scene.remove(projectile.object);
-      });
-      projectiles = [];
-      
-      // Remove all power-ups
-      powerUps.forEach(powerUp => {
-        if (powerUp.object) scene.remove(powerUp.object);
-      });
-      powerUps = [];
-      
-      // Remove all explosions
-      explosions.forEach(explosion => {
-        if (explosion.object) scene.remove(explosion.object);
-      });
-      explosions = [];
-    }
-    
-    // Show game over screen
-    function showGameOverScreen() {
-      log('Showing game over screen');
-      
-      // Hide scoreboard
-      if (scoreBoard) {
-        scoreBoard.visible = false;
-      }
-      
-      // Create game over popup
-      const gameOverScreen = new THREE.Group();
-      gameOverScreen.name = 'gameOverScreen';
-      
-      // Position in front of player
-      const cameraPos = new THREE.Vector3();
-      camera.getWorldPosition(cameraPos);
-      gameOverScreen.position.set(cameraPos.x, floorY + 1.2, cameraPos.z - 1);
-      
-      // Make it face the player
-      gameOverScreen.lookAt(cameraPos.x, gameOverScreen.position.y, cameraPos.z);
-      
-      // Create a background panel
-      const panelGeometry = new THREE.PlaneGeometry(0.5, 0.6);
-      const panelMaterial = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        transparent: true,
-        opacity: 0.8,
-        side: THREE.DoubleSide
-      });
-      const panel = new THREE.Mesh(panelGeometry, panelMaterial);
-      gameOverScreen.add(panel);
-      
-      // Create text
-      createMenuText('Game Over', 0, 0.2, 0.04, gameOverScreen);
-      createMenuText(`Score: ${score}`, 0, 0.1, 0.03, gameOverScreen);
-      
-      // Create restart button
-      const restartButton = createMenuButton('Play Again', 0, -0.1, 0.3, 0.08, () => {
-        scene.remove(gameOverScreen);
-        
-        // Show menu
-        if (menuBoard) {
-          menuBoard.visible = true;
-          updateMenuPosition();
-        }
-      });
-      gameOverScreen.add(restartButton);
-      
-      scene.add(gameOverScreen);
-    }
-    
-    // Spawn moles at random positions
-    function spawnMoles() {
-      if (!gameActive) return;
-      
-      // If current mole count is less than target, spawn more
-      const targetMoleCount = currentDifficulty.moleCount;
-      const spawnCount = Math.max(0, targetMoleCount - moles.length);
-      
-      for (let i = 0; i < spawnCount; i++) {
-        // Find a position that doesn't overlap with existing moles
-        let position;
-        let attempts = 0;
-        const maxAttempts = 10;
-        
-        do {
-          // Random position within spawn radius
-          const radius = getRandomFloat(GAME_CONFIG.mole.minDistance, GAME_CONFIG.mole.spawnRadius);
-          const angle = getRandomFloat(0, Math.PI * 2);
-          const x = radius * Math.cos(angle);
-          const z = radius * Math.sin(angle);
-          
-          position = { x, y: floorY, z };
-          attempts++;
-          
-          // Check if too close to any existing mole
-          const tooClose = moles.some(mole => {
-            const dist = Math.sqrt(
-              Math.pow(position.x - mole.object.position.x, 2) +
-              Math.pow(position.z - mole.object.position.z, 2)
-            );
-            return dist < 0.5; // Minimum distance between moles
-          });
-          
-          if (!tooClose) break;
-        } while (attempts < maxAttempts);
-        
-        // If we found a good position, create a mole
-        if (attempts < maxAttempts) {
-          createMole(position.x, position.y, position.z);
-        }
-      }
-      
-      // Schedule next spawn
-      const baseInterval = GAME_MODES[currentGameMode].spawnInterval;
-      const interval = baseInterval * currentDifficulty.spawnInterval;
-      const adjustedInterval = activePowerUps.timeSlow ? interval * 1.5 : interval;
-      
-      setTimeout(spawnMoles, adjustedInterval);
-    }
-    
-    // Create a mole at the given position
-    function createMole(x, y, z) {
-      // Select mole type
-      const selectedType = getRandomItem(MOLE_TYPES, 'probability');
-      
-      // Clone the mole model
-      const moleModel = models[selectedType.id].object.clone();
-      
-      // Set scale
-      moleModel.scale.set(selectedType.scale, selectedType.scale, selectedType.scale);
-      
-      // Position - START COMPLETELY UNDER THE FLOOR
-      moleModel.position.set(x, y - 0.5, z);  // Fully below floor
-      scene.add(moleModel);
-      
-      // Create mole object
-      const mole = {
-        object: moleModel,
-        type: selectedType,
-        state: 'down',
-        
-        riseUp: function() {
-          if (this.state !== 'down' || !gameActive) return;
-          
-          this.state = 'rising';
-          const startY = y - 0.5;             // Under floor
-          const targetY = y + 0.4;            // HIGHER above floor (0.4m)
-          const startTime = Date.now();
-          const duration = 500 / (this.type.speed * speedMultiplier);
-          
-          createSound('pop');
-          
-          log(`Mole rising from ${startY} to ${targetY}, floor=${y}`);
-          
-          const animate = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
+            // Return projectiles to pool
+            gameState.activeProjectiles.forEach(projectile => {
+                projectile.element.setAttribute('visible', false);
+                pools.projectiles.push(projectile.element);
+            });
+            gameState.activeProjectiles = [];
             
-            moleModel.position.y = startY + (targetY - startY) * progress;
+            // Return explosions to pool
+            gameState.explosions.forEach(explosion => {
+                explosion.element.setAttribute('visible', false);
+                pools.explosions.push(explosion.element);
+            });
+            gameState.explosions = [];
             
-            if (progress < 1 && this.state === 'rising') {
-              requestAnimationFrame(animate);
+            // Return powerups to pool
+            gameState.powerups.forEach(powerup => {
+                powerup.element.setAttribute('visible', false);
+                pools.powerups.push(powerup.element);
+            });
+            gameState.powerups = [];
+        }
+        
+        // Schedule next gopher spawn
+        function scheduleNextGopherSpawn() {
+            if (!gameState.isPlaying) return;
+            
+            const delay = Math.random() * (config.gopherSpawnInterval[1] - config.gopherSpawnInterval[0]) + config.gopherSpawnInterval[0];
+            setTimeout(() => {
+                if (gameState.isPlaying) {
+                    spawnGopher();
+                    scheduleNextGopherSpawn();
+                }
+            }, delay);
+        }
+        
+        // Schedule next powerup spawn
+        function scheduleNextPowerupSpawn() {
+            if (!gameState.isPlaying) return;
+            
+            const delay = Math.random() * (config.powerupSpawnInterval[1] - config.powerupSpawnInterval[0]) + config.powerupSpawnInterval[0];
+            setTimeout(() => {
+                if (gameState.isPlaying && Math.random() < config.powerupChance) {
+                    spawnPowerup();
+                }
+                scheduleNextPowerupSpawn();
+            }, delay);
+        }
+        
+        // Spawn a gopher
+        function spawnGopher() {
+            if (gameState.activeGophers.length >= config.maxGophers) return;
+            
+            // Determine gopher type based on probability
+            const rand = Math.random();
+            let gopherType;
+            let cumulativeProbability = 0;
+            
+            for (const type in config.gopherTypes) {
+                cumulativeProbability += config.gopherTypes[type].chance;
+                if (rand < cumulativeProbability) {
+                    gopherType = config.gopherTypes[type];
+                    gopherType.name = type;
+                    break;
+                }
+            }
+            
+            // Get gopher from pool or create new one
+            let gopher;
+            const gopherPool = document.querySelector('#gopherPool');
+            
+            if (pools.gophers.length > 0) {
+                gopher = pools.gophers.pop();
+                gopher.setAttribute('visible', true);
             } else {
-              this.state = 'up';
-              
-              // Schedule going down
-              setTimeout(() => this.goDown(), currentDifficulty.moleLifetime / (this.type.speed * speedMultiplier));
+                // Create gopher body
+                gopher = document.createElement('a-entity');
+                
+                const body = document.createElement('a-cylinder');
+                body.setAttribute('height', '0.3');
+                body.setAttribute('radius', '0.1');
+                body.setAttribute('position', '0 0.15 0');
+                
+                const head = document.createElement('a-sphere');
+                head.setAttribute('radius', '0.15');
+                head.setAttribute('position', '0 0.45 0');
+                
+                gopher.appendChild(body);
+                gopher.appendChild(head);
+                gopherPool.appendChild(gopher);
             }
-          };
-          
-          animate();
-        },
+            
+            // Set color based on type
+            gopher.querySelectorAll('a-cylinder, a-sphere').forEach(part => {
+                part.setAttribute('color', gopherType.color);
+            });
+            
+            // Random position within spawn area
+            const gameArea = document.querySelector('#gameArea');
+            const gameAreaPos = gameArea.getAttribute('position');
+            const halfSize = config.gopherSpawnArea / 2;
+            const x = Math.random() * config.gopherSpawnArea - halfSize;
+            const z = Math.random() * config.gopherSpawnArea - halfSize;
+            
+            // Position gopher underneath the ground
+            gopher.setAttribute('position', `${gameAreaPos.x + x} -0.5 ${gameAreaPos.z + z}`);
+            
+            // Calculate speed (affected by slow powerup)
+            const speed = gameState.slowGophers ? gopherType.speed * 0.5 : gopherType.speed;
+            
+            // Add to active gophers
+            const gopherData = {
+                element: gopher,
+                type: gopherType,
+                createdAt: Date.now(),
+                state: 'rising',
+                speed: speed
+            };
+            
+            gameState.activeGophers.push(gopherData);
+        }
         
-        goDown: function() {
-          if ((this.state !== 'up' && this.state !== 'hit') || !gameActive) return;
-          
-          this.state = 'lowering';
-          const startY = moleModel.position.y;  // Current position (might be above floor)
-          const targetY = y - 0.5;              // End position (below floor)
-          const startTime = Date.now();
-          const duration = 500 / (this.type.speed * speedMultiplier);
-          
-          // Play miss sound if in endless mode and mole wasn't hit
-          if (currentGameMode === 'endless' && this.state !== 'hit') {
-            createSound('miss');
-            currentDifficulty.misses++;
+        // Spawn a powerup
+        function spawnPowerup() {
+            // Choose a random powerup type
+            const powerupTypes = Object.values(config.powerupTypes);
+            const powerupType = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
             
-            if (currentDifficulty.misses >= GAME_MODES.endless.missesAllowed) {
-              endGame();
-              return;
-            }
-          }
-          
-          const animate = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
+            // Get powerup from pool or create new one
+            let powerup;
+            const powerupPool = document.querySelector('#powerupPool');
             
-            moleModel.position.y = startY + (targetY - startY) * progress;
-            
-            if (progress < 1 && this.state === 'lowering') {
-              requestAnimationFrame(animate);
+            if (pools.powerups.length > 0) {
+                powerup = pools.powerups.pop();
+                powerup.setAttribute('visible', true);
             } else {
-              this.state = 'down';
-              
-              // Remove the mole
-              const index = moles.indexOf(this);
-              if (index > -1) {
-                moles.splice(index, 1);
-                scene.remove(moleModel);
-              }
+                powerup = document.createElement('a-box');
+                powerup.setAttribute('width', '0.2');
+                powerup.setAttribute('height', '0.2');
+                powerup.setAttribute('depth', '0.2');
+                powerupPool.appendChild(powerup);
             }
-          };
-          
-          animate();
-        }
-      };
-      
-      // Add to moles array
-      moles.push(mole);
-      
-      // Start rising
-      mole.riseUp();
-      
-      return mole;
-    }
-    
-    // Spawn power-ups periodically
-    function spawnPowerUps() {
-      if (!gameActive) return;
-      
-      // Only spawn if no active power-up on screen
-      if (powerUps.length === 0) {
-        // Random position within spawn radius
-        const radius = getRandomFloat(GAME_CONFIG.mole.minDistance, GAME_CONFIG.powerUp.spawnRadius);
-        const angle = getRandomFloat(0, Math.PI * 2);
-        const x = radius * Math.cos(angle);
-        const z = radius * Math.sin(angle);
-        
-        createPowerUp(x, floorY, z);
-      }
-      
-      // Schedule next spawn
-      setTimeout(spawnPowerUps, GAME_MODES[currentGameMode].powerUpSpawnInterval);
-    }
-    
-    // Create a power-up at the given position
-    function createPowerUp(x, y, z) {
-      // Select power-up type
-      const selectedType = getRandomItem(GAME_CONFIG.powerUp.types);
-      
-      // Clone the power-up model
-      const powerUpModel = models.powerUp.object.clone();
-      
-      // Set material color based on power-up type
-      powerUpModel.material = powerUpModel.material.clone();
-      powerUpModel.material.color.set(selectedType.color);
-      powerUpModel.material.emissive.set(selectedType.color);
-      
-      // Position above floor
-      powerUpModel.position.set(x, y + 0.5, z);
-      scene.add(powerUpModel);
-      
-      // Create power-up object
-      const powerUp = {
-        object: powerUpModel,
-        type: selectedType,
-        active: true,
-        createdAt: Date.now()
-      };
-      
-      // Add to power-ups array
-      powerUps.push(powerUp);
-      
-      // Set timeout to remove if not collected
-      setTimeout(() => {
-        if (powerUps.includes(powerUp)) {
-          const index = powerUps.indexOf(powerUp);
-          if (index > -1) {
-            powerUps.splice(index, 1);
-            scene.remove(powerUpModel);
-          }
-        }
-      }, GAME_CONFIG.powerUp.lifetime);
-      
-      // Start floating animation
-      animatePowerUp(powerUp);
-      
-      return powerUp;
-    }
-    
-    // Animate a power-up (floating and rotating)
-    function animatePowerUp(powerUp) {
-      if (!powerUp || !powerUp.active || !gameActive) return;
-      
-      const { object, createdAt } = powerUp;
-      const now = Date.now();
-      const elapsed = now - createdAt;
-      
-      // Floating movement
-      object.position.y = powerUp.object.position.y + 0.05 * Math.sin(elapsed * 0.003);
-      
-      // Rotating movement
-      object.rotation.y = elapsed * 0.002;
-      object.rotation.x = elapsed * 0.001;
-      
-      // Continue animation if still active
-      if (powerUp.active && gameActive) {
-        requestAnimationFrame(() => animatePowerUp(powerUp));
-      }
-    }
-    
-    // Activate a power-up
-    function activatePowerUp(powerUp) {
-      if (!powerUp || !powerUp.active) return;
-      
-      const { type } = powerUp;
-      log(`Activating power-up: ${type.id}`);
-      
-      // Mark as inactive and remove from scene
-      powerUp.active = false;
-      scene.remove(powerUp.object);
-      
-      // Remove from array
-      const index = powerUps.indexOf(powerUp);
-      if (index > -1) {
-        powerUps.splice(index, 1);
-      }
-      
-      // Apply power-up effect
-      switch (type.id) {
-        case 'rapidFire':
-          activePowerUps.rapidFire = true;
-          break;
-          
-        case 'doublePoints':
-          scoreMultiplier = 2;
-          break;
-          
-        case 'timeSlow':
-          activePowerUps.timeSlow = true;
-          speedMultiplier = 0.5;
-          break;
-      }
-      
-      // Create floating notification
-      showFloatingText(`${type.name} activated!`, 0, 1.5, -1, 0x00FFFF);
-      
-      // Update scoreboard
-      if (scoreBoard) {
-        scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-      }
-      
-      // Set timeout to deactivate
-      setTimeout(() => {
-        log(`Power-up expired: ${type.id}`);
-        
-        // Remove effect
-        switch (type.id) {
-          case 'rapidFire':
-            activePowerUps.rapidFire = false;
-            break;
             
-          case 'doublePoints':
-            scoreMultiplier = 1;
-            break;
+            // Set color
+            powerup.setAttribute('color', powerupType.color);
+            powerup.setAttribute('material', 'emissive: ' + powerupType.color + '; emissiveIntensity: 0.5');
             
-          case 'timeSlow':
-            activePowerUps.timeSlow = false;
-            speedMultiplier = 1;
-            break;
+            // Random position within spawn area
+            const gameArea = document.querySelector('#gameArea');
+            const gameAreaPos = gameArea.getAttribute('position');
+            const halfSize = config.gopherSpawnArea / 2;
+            const x = Math.random() * config.gopherSpawnArea - halfSize;
+            const z = Math.random() * config.gopherSpawnArea - halfSize;
+            
+            // Position powerup just above the ground
+            powerup.setAttribute('position', `${gameAreaPos.x + x} 0.2 ${gameAreaPos.z + z}`);
+            
+            // Add to active powerups
+            const powerupData = {
+                element: powerup,
+                type: powerupType,
+                createdAt: Date.now()
+            };
+            
+            gameState.powerups.push(powerupData);
+            
+            // Automatically remove powerup after 5 seconds if not collected
+            setTimeout(() => {
+                const index = gameState.powerups.findIndex(p => p === powerupData);
+                if (index !== -1) {
+                    gameState.powerups.splice(index, 1);
+                    powerup.setAttribute('visible', false);
+                    pools.powerups.push(powerup);
+                }
+            }, 5000);
+        }
+        
+        // Create explosion effect
+        function createExplosion(position) {
+            // Get explosion from pool or create new one
+            let explosion;
+            const explosionPool = document.querySelector('#explosionPool');
+            
+            if (pools.explosions.length > 0) {
+                explosion = pools.explosions.pop();
+                explosion.setAttribute('visible', true);
+            } else {
+                explosion = document.createElement('a-sphere');
+                explosion.setAttribute('radius', '0.1');
+                explosion.setAttribute('opacity', '0.8');
+                explosion.setAttribute('material', 'emissive: yellow; emissiveIntensity: 0.8');
+                explosionPool.appendChild(explosion);
+            }
+            
+            // Position at the hit location
+            explosion.setAttribute('position', position);
+            
+            // Scale up and fade out
+            explosion.setAttribute('scale', '0.1 0.1 0.1');
+            const explosionData = {
+                element: explosion,
+                createdAt: Date.now()
+            };
+            
+            gameState.explosions.push(explosionData);
+        }
+        
+        // Apply a powerup effect
+        function applyPowerup(powerupType) {
+            // Play powerup sound
+            sounds.powerup();
+            
+            // Apply effect
+            if (powerupType.effect === 'doubleScore') {
+                gameState.scoreMultiplier = 2;
+                gameState.powerupType = 'doubleScore';
+            } else if (powerupType.effect === 'slowGophers') {
+                gameState.slowGophers = true;
+                gameState.powerupType = 'slowGophers';
+            }
+            
+            // Set duration
+            gameState.powerupTimeRemaining = config.powerupDuration / 1000;
+        }
+        
+        // Check for collisions between projectiles and gophers/powerups
+        function checkCollisions() {
+            // Projectile vs Gopher
+            gameState.activeProjectiles.forEach(projectile => {
+                const projectilePos = projectile.element.getAttribute('position');
+                
+                // Check against gophers
+                gameState.activeGophers.forEach(gopher => {
+                    // Only check gophers that are visible (above ground)
+                    if (gopher.state !== 'visible') return;
+                    
+                    const gopherPos = gopher.element.getAttribute('position');
+                    
+                    // Simple distance check for collision
+                    const dx = projectilePos.x - gopherPos.x;
+                    const dy = projectilePos.y - gopherPos.y;
+                    const dz = projectilePos.z - gopherPos.z;
+                    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    
+                    if (distance < 0.25) { // Using a radius of 0.25 for hit detection
+                        // Mark gopher as hit
+                        gopher.state = 'hit';
+                        
+                        // Update score
+                        gameState.score += gopher.type.points * gameState.scoreMultiplier;
+                        updateScoreboard();
+                        
+                        // Create explosion
+                        createExplosion(gopherPos);
+                        
+                        // Play hit sound
+                        sounds.hit();
+                        
+                        // Return projectile to pool
+                        projectile.element.setAttribute('visible', false);
+                        pools.projectiles.push(projectile.element);
+                        const projectileIndex = gameState.activeProjectiles.indexOf(projectile);
+                        if (projectileIndex !== -1) {
+                            gameState.activeProjectiles.splice(projectileIndex, 1);
+                        }
+                    }
+                });
+                
+                // Check against powerups
+                gameState.powerups.forEach(powerup => {
+                    const powerupPos = powerup.element.getAttribute('position');
+                    
+                    // Simple distance check for collision
+                    const dx = projectilePos.x - powerupPos.x;
+                    const dy = projectilePos.y - powerupPos.y;
+                    const dz = projectilePos.z - powerupPos.z;
+                    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    
+                    if (distance < 0.3) { // Using a radius of 0.3 for hit detection
+                        // Apply powerup
+                        applyPowerup(powerup.type);
+                        
+                        // Create explosion
+                        createExplosion(powerupPos);
+                        
+                        // Return powerup to pool
+                        powerup.element.setAttribute('visible', false);
+                        pools.powerups.push(powerup.element);
+                        const powerupIndex = gameState.powerups.indexOf(powerup);
+                        if (powerupIndex !== -1) {
+                            gameState.powerups.splice(powerupIndex, 1);
+                        }
+                        
+                        // Return projectile to pool
+                        projectile.element.setAttribute('visible', false);
+                        pools.projectiles.push(projectile.element);
+                        const projectileIndex = gameState.activeProjectiles.indexOf(projectile);
+                        if (projectileIndex !== -1) {
+                            gameState.activeProjectiles.splice(projectileIndex, 1);
+                        }
+                    }
+                });
+            });
         }
         
         // Update scoreboard
-        if (scoreBoard && gameActive) {
-          scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-        }
-      }, type.duration);
-    }
-    
-    // Fire a projectile from controller
-    function fireProjectile(fromController) {
-      const now = Date.now();
-      const cooldown = activePowerUps.rapidFire ? 
-                      GAME_CONFIG.projectile.cooldown / 2 : 
-                      GAME_CONFIG.projectile.cooldown;
-                      
-      if (now - lastFireTime < cooldown) {
-        return; // Still in cooldown
-      }
-      
-      lastFireTime = now;
-      
-      // Create projectile visual
-      const projectile = models.projectile.object.clone();
-      scene.add(projectile);
-      
-      // Set up raycaster from controller
-      raycaster.ray.origin.setFromMatrixPosition(fromController.matrixWorld);
-      tempMatrix.identity().extractRotation(fromController.matrixWorld);
-      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-      
-      // Animate the projectile
-      const startPos = raycaster.ray.origin.clone();
-      const velocity = raycaster.ray.direction.clone().multiplyScalar(GAME_CONFIG.projectile.speed);
-      const startTime = now;
-      
-      // Store info to check for collisions
-      const projectileInfo = {
-        object: projectile,
-        ray: raycaster.ray.clone(),
-        createdAt: now
-      };
-      
-      // Add to projectiles array for tracking
-      projectiles.push(projectileInfo);
-      
-      // Projectile animation and collision detection in one function
-      const animateProjectile = () => {
-        const elapsed = (Date.now() - startTime) / 1000; // seconds
-        const distance = GAME_CONFIG.projectile.speed * elapsed;
-        
-        // Update projectile position
-        projectile.position.copy(startPos).add(velocity.clone().multiplyScalar(elapsed));
-        
-        // DIRECT HIT TESTING - check all moles to see if we hit any
-        let hit = false;
-        moles.forEach(mole => {
-          if (mole.state === 'up' || mole.state === 'rising') {
-            // Get distance from projectile to mole
-            const molePos = mole.object.position.clone();
-            const dist = projectile.position.distanceTo(molePos);
+        function updateScoreboard() {
+            document.querySelector('#scoreText').setAttribute('value', `Score: ${gameState.score}`);
+            document.querySelector('#timeText').setAttribute('value', `Time: ${gameState.timeRemaining}`);
             
-            // If close enough, it's a hit
-            if (dist < 0.4) { // Generous hit radius
-              hit = true;
-              log(`HIT MOLE at distance ${dist.toFixed(2)}`);
-              
-              // Create explosion effect
-              createExplosion(molePos.x, molePos.y, molePos.z);
-              
-              // Play sound and haptic feedback
-              createSound('hit');
-              createSound('explosion');
-              triggerHapticFeedback(fromController);
-              
-              // Update score
-              const points = mole.type.points;
-              updateScore(points);
-              showFloatingPoints(molePos.x, molePos.y, molePos.z, points);
-              
-              // Add time in time attack mode
-              if (currentGameMode === 'timeAttack' && GAME_MODES.timeAttack) {
-                const timeBonus = GAME_MODES.timeAttack.timeBonus;
-                timeRemaining += timeBonus;
-                if (scoreBoard) scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-                showFloatingTime(molePos.x, molePos.y, molePos.z, timeBonus);
-              }
-              
-              // Force the mole to go down
-              mole.state = 'hit';
-              mole.object.traverse(child => {
-                if (child.isMesh && child.material) {
-                  child.material.emissive = new THREE.Color(0xFF0000);
+            // Show active powerup
+            let powerupText = '';
+            if (gameState.powerupType === 'doubleScore') {
+                powerupText = `Double Score: ${gameState.powerupTimeRemaining}s`;
+            } else if (gameState.powerupType === 'slowGophers') {
+                powerupText = `Slow Gophers: ${gameState.powerupTimeRemaining}s`;
+            }
+            document.querySelector('#powerupText').setAttribute('value', powerupText);
+        }
+        
+        // Main game loop
+        function gameLoop() {
+            if (!gameState.isPlaying) return;
+            
+            const now = Date.now();
+            
+            // Update projectiles
+            gameState.activeProjectiles.forEach((projectile, index) => {
+                // Check if expired
+                if (now - projectile.createdAt > config.projectileLifetime) {
+                    projectile.element.setAttribute('visible', false);
+                    pools.projectiles.push(projectile.element);
+                    gameState.activeProjectiles.splice(index, 1);
+                    return;
                 }
-              });
-              mole.goDown();
-              
-              // Remove projectile from scene
-              scene.remove(projectile);
-              
-              // Remove from projectiles array
-              const projectileIndex = projectiles.findIndex(p => p.object === projectile);
-              if (projectileIndex > -1) {
-                projectiles.splice(projectileIndex, 1);
-              }
-            }
-          }
-        });
-        
-        // Also check for power-up hits (simplified)
-        if (!hit) {
-          powerUps.forEach(powerUp => {
-            if (powerUp.active) {
-              const powerUpPos = powerUp.object.position.clone();
-              const dist = projectile.position.distanceTo(powerUpPos);
-              
-              if (dist < 0.4) {
-                hit = true;
-                activatePowerUp(powerUp);
-                triggerHapticFeedback(fromController);
-                createSound('powerUp');
                 
-                // Remove projectile from scene
-                scene.remove(projectile);
+                // Move projectile
+                const currentPos = projectile.element.getAttribute('position');
+                const velocity = projectile.velocity;
+                const deltaTime = 1/60; // Assuming 60 FPS
                 
-                // Remove from projectiles array
-                const projectileIndex = projectiles.findIndex(p => p.object === projectile);
-                if (projectileIndex > -1) {
-                  projectiles.splice(projectileIndex, 1);
+                const newPos = {
+                    x: currentPos.x + velocity.x * deltaTime,
+                    y: currentPos.y + velocity.y * deltaTime,
+                    z: currentPos.z + velocity.z * deltaTime
+                };
+                
+                projectile.element.setAttribute('position', newPos);
+            });
+            
+            // Update gophers
+            gameState.activeGophers.forEach((gopher, index) => {
+                // Check if expired
+                if (now - gopher.createdAt > config.gopherLifetime && gopher.state === 'visible') {
+                    gopher.state = 'lowering';
                 }
-              }
-            }
-          });
-        }
-        
-        // Continue animation if projectile still exists and hasn't hit anything
-        if (!hit && Date.now() - startTime < GAME_CONFIG.projectile.lifetime) {
-          requestAnimationFrame(animateProjectile);
-        } else {
-          // Remove projectile at end of lifetime
-          if (!hit) {
-            scene.remove(projectile);
+                
+                // Update gopher state
+                const currentPos = gopher.element.getAttribute('position');
+                
+                // State machine for gopher animation
+                if (gopher.state === 'rising') {
+                    // Rising animation
+                    currentPos.y += 0.05 * gopher.speed;
+                    if (currentPos.y >= 0) {
+                        currentPos.y = 0;
+                        gopher.state = 'visible';
+                    }
+                    gopher.element.setAttribute('position', currentPos);
+                } else if (gopher.state === 'lowering' || gopher.state === 'hit') {
+                    // Lowering animation
+                    currentPos.y -= 0.05 * gopher.speed;
+                    if (currentPos.y <= -0.5) {
+                        // Remove gopher
+                        gopher.element.setAttribute('visible', false);
+                        pools.gophers.push(gopher.element);
+                        gameState.activeGophers.splice(index, 1);
+                    } else {
+                        gopher.element.setAttribute('position', currentPos);
+                    }
+                }
+            });
             
-            // Remove from projectiles array
-            const projectileIndex = projectiles.findIndex(p => p.object === projectile);
-            if (projectileIndex > -1) {
-              projectiles.splice(projectileIndex, 1);
-            }
-          }
+            // Update explosions
+            gameState.explosions.forEach((explosion, index) => {
+                const age = now - explosion.createdAt;
+                if (age > 500) { // 500ms lifespan
+                    explosion.element.setAttribute('visible', false);
+                    pools.explosions.push(explosion.element);
+                    gameState.explosions.splice(index, 1);
+                    return;
+                }
+                
+                // Scale up and fade out
+                const scale = 0.1 + (age / 500) * 1.5;
+                const opacity = 0.8 - (age / 500) * 0.8;
+                
+                explosion.element.setAttribute('scale', `${scale} ${scale} ${scale}`);
+                explosion.element.setAttribute('opacity', opacity);
+            });
+            
+            // Check for collisions
+            checkCollisions();
+            
+            // Keep scoreboard facing player
+            const scoreboard = document.querySelector('#scoreboard');
+            const camera = document.querySelector('#camera');
+            const cameraPos = camera.getAttribute('position');
+            
+            // Make the scoreboard face the player
+            const scoreboardPos = scoreboard.getAttribute('position');
+            const direction = new THREE.Vector3(
+                cameraPos.x - scoreboardPos.x,
+                0, // only rotate on y axis
+                cameraPos.z - scoreboardPos.z
+            ).normalize();
+            
+            // Calculate the rotation to face the player
+            const angle = Math.atan2(direction.x, direction.z);
+            scoreboard.setAttribute('rotation', `-90 ${angle * 180 / Math.PI} 0`);
+            
+            // Continue the game loop
+            requestAnimationFrame(gameLoop);
         }
-      };
-      
-      // Start animation
-      animateProjectile();
-      
-      // Play sound
-      createSound('fire');
-      
-      // Trigger haptic feedback
-      triggerHapticFeedback(fromController);
-      
-      return projectileInfo;
-    }
-    
-    // Update score
-    function updateScore(points) {
-      const adjustedPoints = points * scoreMultiplier;
-      score += adjustedPoints;
-      
-      if (scoreBoard) {
-        scoreBoard.updateScore(score, timeRemaining, scoreMultiplier);
-      }
-    }
-    
-    // Show floating points text
-    function showFloatingPoints(x, y, z, points) {
-      const adjustedPoints = points * scoreMultiplier;
-      const text = `+${adjustedPoints}`;
-      showFloatingText(text, x, y, z, 0xFFFF00);
-    }
-    
-    // Show floating time text
-    function showFloatingTime(x, y, z, seconds) {
-      const text = `+${seconds}s`;
-      showFloatingText(text, x, y, z, 0x00FF00);
-    }
-    
-    // Show floating text
-    function showFloatingText(text, x, y, z, color = 0xFFFFFF) {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = 256;
-      canvas.height = 128;
-      
-      context.fillStyle = 'rgba(0, 0, 0, 0)';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      
-      context.font = 'bold 48px Arial';
-      context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
-      context.strokeStyle = '#000000';
-      context.lineWidth = 4;
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.strokeText(text, canvas.width / 2, canvas.height / 2);
-      context.fillText(text, canvas.width / 2, canvas.height / 2);
-      
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.MeshBasicMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 1,
-        side: THREE.DoubleSide
-      });
-      
-      const geometry = new THREE.PlaneGeometry(0.5, 0.25);
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(x, y + 0.5, z);
-      scene.add(mesh);
-      
-      // Make it face the camera
-      mesh.lookAt(camera.position);
-      
-      // Animate floating up and fading out
-      const startY = mesh.position.y;
-      const startTime = Date.now();
-      const duration = 1000;
-      
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
         
-        mesh.position.y = startY + progress * 0.5;
-        material.opacity = 1 - progress;
-        
-        // Update orientation to face camera
-        mesh.lookAt(camera.position);
-        
-        if (progress < 1 && gameActive) {
-          requestAnimationFrame(animate);
-        } else {
-          scene.remove(mesh);
-        }
-      };
-      
-      animate();
-    }
-    
-    // Create explosion effect
-    function createExplosion(x, y, z) {
-      // Create a group for the explosion
-      const explosionGroup = new THREE.Group();
-      explosionGroup.position.set(x, y, z);
-      scene.add(explosionGroup);
-      
-      // Create a burst of particles
-      const particleCount = 10;
-      const particles = [];
-      
-      for (let i = 0; i < particleCount; i++) {
-        const particle = new THREE.Mesh(
-          new THREE.SphereGeometry(0.03, 8, 8),
-          new THREE.MeshBasicMaterial({ 
-            color: 0xFF5000, 
-            emissive: 0xFF5000,
-            emissiveIntensity: 1
-          })
-        );
-        
-        // Start at explosion center
-        particle.position.set(0, 0, 0);
-        
-        // Random velocity direction
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.random() * Math.PI;
-        const velocity = {
-          x: Math.sin(phi) * Math.cos(theta) * 3.0,
-          y: Math.sin(phi) * Math.sin(theta) * 3.0,
-          z: Math.cos(phi) * 3.0
-        };
-        
-        particle.userData = { velocity };
-        explosionGroup.add(particle);
-        particles.push(particle);
-      }
-      
-      // Create a flash at the center
-      const flash = new THREE.Mesh(
-        new THREE.SphereGeometry(0.1, 16, 16),
-        new THREE.MeshBasicMaterial({ 
-          color: 0xFFFFFF, 
-          transparent: true, 
-          opacity: 1 
-        })
-      );
-      explosionGroup.add(flash);
-      
-      // Animate the explosion
-      const startTime = Date.now();
-      const duration = 500;
-      
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Update particles
-        particles.forEach(particle => {
-          const { velocity } = particle.userData;
-          particle.position.x += velocity.x * 0.01;
-          particle.position.y += velocity.y * 0.01;
-          particle.position.z += velocity.z * 0.01;
-          particle.scale.multiplyScalar(0.95);
+        // Initialize event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Listen for A-Frame scene loaded
+            const scene = document.querySelector('a-scene');
+            scene.addEventListener('loaded', () => {
+                console.log('A-Frame scene loaded. Enter AR to begin.');
+            });
+            
+            // Listen for WebXR session
+            scene.addEventListener('enter-vr', () => {
+                console.log('WebXR session started.');
+                // Start instruction text will guide the user to mark the floor
+            });
+            
+            // Listen for WebXR session end
+            scene.addEventListener('exit-vr', () => {
+                console.log('WebXR session ended.');
+                // If game is in progress, end it
+                if (gameState.isPlaying) {
+                    endGame();
+                }
+            });
         });
-        
-        // Update flash
-        flash.scale.set(1 + progress * 2, 1 + progress * 2, 1 + progress * 2);
-        flash.material.opacity = 1 - progress;
-        
-        if (progress < 1 && gameActive) {
-          requestAnimationFrame(animate);
-        } else {
-          scene.remove(explosionGroup);
-          
-          // Remove from array of explosions
-          const index = explosions.indexOf(explosionGroup);
-          if (index > -1) {
-            explosions.splice(index, 1);
-          }
-        }
-      };
-      
-      // Start animation
-      animate();
-      
-      // Add to explosions array
-      explosions.push(explosionGroup);
-      
-      return explosionGroup;
-    }
-    
-    // Main rendering function
-    function render(timestamp, frame) {
-      if (frame && xrSession) {
-        // Get hit test results
-        const referenceSpace = xrReferenceSpace;
-        const session = xrSession;
-        
-        if (hitTestSource && referenceSpace) {
-          const hitTestResults = frame.getHitTestResults(hitTestSource);
-          
-          if (hitTestResults.length > 0) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(referenceSpace);
-            
-            if (pose) {
-              // Update reticle position
-              if (floorReticle) {
-                floorReticle.visible = true;
-                floorReticle.position.set(
-                  pose.transform.position.x,
-                  pose.transform.position.y,
-                  pose.transform.position.z
-                );
-                floorReticle.quaternion.set(
-                  pose.transform.orientation.x,
-                  pose.transform.orientation.y,
-                  pose.transform.orientation.z,
-                  pose.transform.orientation.w
-                );
-              }
-            }
-          } else {
-            if (floorReticle) floorReticle.visible = false;
-          }
-        }
-        
-        // Get viewer pose
-        const viewerPose = frame.getViewerPose(referenceSpace);
-        if (viewerPose) {
-          // Update menu position
-          updateMenuPosition();
-        }
-      }
-      
-      // Render the scene
-      renderer.render(scene, camera);
-    }
-    
-    // Start the app when the page loads
-    window.addEventListener('load', init);
-  </script>
+    </script>
 </body>
 </html>
