@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Whack-A-Gopher XR</title>
+    
+    <!-- A-Frame library -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    
+    <style>
+        body { 
+            margin: 0; 
+            background-color: #000;
+        }
+        
+        #initial-loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #1a1a1a, #4a4a4a);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+            opacity: 1;
+            transition: opacity 0.5s ease-out;
+        }
+
+        #loading-logo {
+            font-size: 2em;
+            margin-bottom: 20px;
+            color: #7BC8A4;
+            text-shadow: 0 0 10px rgba(123, 200, 164, 0.5);
+        }
+
+        #loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #7BC8A4;
+            border-top: 5px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px 0;
+        }
+
+        #version-display {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            color: white;
+            font-family: monospace;
+            z-index: 9999;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Style the AR/VR button */
+        .a-enter-ar, .a-enter-vr {
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            width: auto !important;
+            height: auto !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 2px solid #7BC8A4 !important;
+            border-radius: 5px !important;
+            padding: 10px 20px !important;
+            font-family: Arial, sans-serif !important;
+            font-size: 14px !important;
+            color: #fff !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+        }
+
+        .a-enter-ar:hover, .a-enter-vr:hover {
+            background: rgba(123, 200, 164, 0.5) !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Initial loading screen -->
+    <div id="initial-loading-screen">
+        <div id="loading-logo">Whack-A-Gopher XR</div>
+        <div id="loading-spinner"></div>
+        <div>Loading game assets...</div>
+    </div>
+
+    <!-- Version display -->
+    <div id="version-display">v1.0</div>
+
+    <!-- A-Frame scene -->
+    <a-scene 
+        webxr="requiredFeatures: local-floor, hit-test;"
+        renderer="antialias: true; colorManagement: true;"
+        loading-screen="enabled: false">
+        
+        <!-- Camera rig -->
+        <a-entity id="rig" position="0 0 0">
+            <a-entity id="camera" camera look-controls wasd-controls="enabled: false">
+                <!-- UI elements attached to camera -->
+                <a-entity id="startUI" 
+                    position="0 0 -1" 
+                    text="value: Point at floor and pull trigger to start; width: 1; align: center; color: white;"
+                    visible="true">
+                </a-entity>
+            </a-entity>
+            <a-entity id="left-controller" oculus-touch-controls="hand: left" gun-controller="hand: left"></a-entity>
+            <a-entity id="right-controller" oculus-touch-controls="hand: right" gun-controller="hand: right"></a-entity>
+        </a-entity>
+
+        <!-- Game area - will be positioned when floor is marked -->
+        <a-entity id="gameArea" visible="false">
+            <!-- Floor marker -->
+            <a-plane id="floor" 
+                rotation="-90 0 0" 
+                width="3" height="3" 
+                color="#7BC8A4" 
+                opacity="0.5">
+            </a-plane>
+        </a-entity>
+
+        <!-- Container for gophers -->
+        <a-entity id="gopherContainer"></a-entity>
+
+        <!-- Environment -->
+        <a-sky color="#ECECEC"></a-sky>
+        <a-plane position="0 0 0" rotation="-90 0 0" width="100" height="100" color="#CCCCCC"></a-plane>
+    </a-scene>
+
+    <script>
+        // Version number
+        const VERSION = '1.0';
+        document.getElementById('version-display').textContent = `v${VERSION}`;
+
+        // Function to hide loading screen with fade
+        function hideLoadingScreen() {
+            const loadingScreen = document.getElementById('initial-loading-screen');
+            if (loadingScreen) {
+                loadingScreen.style.opacity = '0';
+                setTimeout(() => {
+                    loadingScreen.style.display = 'none';
+                }, 500);
+            }
+        }
+
+        // Hide loading screen when A-Frame is ready
+        document.querySelector('a-scene').addEventListener('loaded', hideLoadingScreen);
+        
+        // Fallback timeout to hide loading screen
+        setTimeout(hideLoadingScreen, 3000);
+
+        // Debug mode flag
+        const DEBUG = true;
+
+        // Game state object
+        const gameState = {
+            isPlaying: false,
+            floorMarked: false,
+            score: 0,
+            timeRemaining: 60,
+            activeGophers: []
+        };
+
+        // Gun controller component
+        AFRAME.registerComponent('gun-controller', {
+            schema: {
+                hand: {type: 'string', default: 'right'}
+            },
+            
+            init: function() {
+                // Create gun model
+                this.createGunModel();
+                
+                // Set up shooting
+                this.el.addEventListener('triggerdown', this.shoot.bind(this));
+            },
+            
+            createGunModel: function() {
+                // Create gun handle
+                const handle = document.createElement('a-box');
+                handle.setAttribute('width', '0.03');
+                handle.setAttribute('height', '0.08');
+                handle.setAttribute('depth', '0.15');
+                handle.setAttribute('position', '0 -0.05 0');
+                handle.setAttribute('rotation', '45 0 0');
+                handle.setAttribute('color', '#333');
+                this.el.appendChild(handle);
+                
+                // Create gun barrel
+                const barrel = document.createElement('a-cylinder');
+                barrel.setAttribute('radius', '0.02');
+                barrel.setAttribute('height', '0.2');
+                barrel.setAttribute('position', '0 0 -0.15');
+                barrel.setAttribute('rotation', '90 0 0');
+                barrel.setAttribute('color', '#222');
+                this.el.appendChild(barrel);
+            },
+            
+            shoot: function() {
+                // Create projectile
+                const projectile = document.createElement('a-sphere');
+                projectile.setAttribute('radius', '0.02');
+                projectile.setAttribute('color', 'cyan');
+                projectile.setAttribute('material', 'emissive: cyan; emissiveIntensity: 0.5');
+                
+                // Get controller position and direction
+                const controllerObject = this.el.object3D;
+                const position = new THREE.Vector3();
+                const direction = new THREE.Vector3(0, 0, -1);
+                
+                controllerObject.getWorldPosition(position);
+                direction.applyQuaternion(controllerObject.quaternion);
+                
+                // Position projectile at gun barrel
+                projectile.setAttribute('position', position);
+                
+                // Add to scene
+                document.querySelector('a-scene').appendChild(projectile);
+                
+                // Add velocity for simple animation
+                projectile.setAttribute('velocity', direction.multiplyScalar(10));
+                
+                // Remove after 2 seconds
+                setTimeout(() => {
+                    if (projectile.parentNode) {
+                        projectile.parentNode.removeChild(projectile);
+                    }
+                }, 2000);
+            }
+        });
+
+        // Simple velocity component for projectiles
+        AFRAME.registerComponent('velocity', {
+            schema: {type: 'vec3'},
+            
+            tick: function(time, deltaTime) {
+                const velocity = this.data;
+                const position = this.el.object3D.position;
+                
+                // Convert deltaTime to seconds
+                const delta = deltaTime / 1000;
+                
+                // Update position based on velocity
+                position.x += velocity.x * delta;
+                position.y += velocity.y * delta;
+                position.z += velocity.z * delta;
+            }
+        });
+    </script>
+</body>
+</html>
