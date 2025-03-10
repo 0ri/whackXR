@@ -11,7 +11,61 @@
     
     <style>
         /* Critical CSS */
-        body { margin: 0; }
+        body { 
+            margin: 0; 
+            background-color: #000;
+        }
+        
+        #initial-loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #1a1a1a, #4a4a4a);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+        }
+
+        #loading-logo {
+            font-size: 2em;
+            margin-bottom: 20px;
+            color: #7BC8A4;
+            text-shadow: 0 0 10px rgba(123, 200, 164, 0.5);
+        }
+
+        #loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #7BC8A4;
+            border-top: 5px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px 0;
+        }
+
+        #version-display {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            color: white;
+            font-family: monospace;
+            z-index: 9999;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         .error-message {
             position: fixed;
             top: 50%;
@@ -25,9 +79,49 @@
             display: none;
             z-index: 999;
         }
+
+        /* Style the AR/VR button */
+        .a-enter-ar, .a-enter-vr {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: auto !important;
+            height: auto !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 2px solid #7BC8A4 !important;
+            border-radius: 5px !important;
+            padding: 10px 20px !important;
+            font-family: Arial, sans-serif !important;
+            font-size: 14px !important;
+            color: #fff !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+        }
+
+        .a-enter-ar:hover, .a-enter-vr:hover {
+            background: rgba(123, 200, 164, 0.5) !important;
+        }
+
+        /* Hide default A-Frame VR button styles */
+        .a-enter-vr-button {
+            background: transparent !important;
+            border: none !important;
+            width: 100% !important;
+            height: 100% !important;
+        }
     </style>
 </head>
 <body>
+    <!-- Initial loading screen -->
+    <div id="initial-loading-screen">
+        <div id="loading-logo">Whack-A-Gopher XR</div>
+        <div id="loading-spinner"></div>
+        <div>Loading game assets...</div>
+    </div>
+
+    <!-- Version display -->
+    <div id="version-display">v1.0</div>
+
     <!-- Error message container -->
     <div id="unsupported-message" class="error-message">
         WebXR is not supported in your browser. Please use an Oculus Browser 15.0+ on Quest.
@@ -36,8 +130,8 @@
     <!-- A-Frame scene -->
     <a-scene 
         webxr="requiredFeatures: local-floor, hit-test;"
-        renderer="antialias: true;"
-        loading-screen="dotsColor: white; backgroundColor: #222"
+        renderer="antialias: true; colorManagement: true;"
+        loading-screen="enabled: false"
         game-manager>
         
         <!-- Camera rig -->
@@ -50,8 +144,8 @@
                     visible="true">
                 </a-entity>
             </a-entity>
-            <a-entity id="left-controller" oculus-touch-controls="hand: left" gun-controller="hand: left"></a-entity>
-            <a-entity id="right-controller" oculus-touch-controls="hand: right" gun-controller="hand: right"></a-entity>
+            <a-entity id="left-controller" oculus-touch-controls="hand: left"></a-entity>
+            <a-entity id="right-controller" oculus-touch-controls="hand: right"></a-entity>
         </a-entity>
 
         <!-- Game area - will be positioned when floor is marked -->
@@ -70,8 +164,18 @@
 
     </a-scene>
 
-    <!-- Basic WebXR feature detection -->
     <script>
+        // Version number - update this when making changes
+        const VERSION = '1.0';
+        
+        // Update version display
+        document.getElementById('version-display').textContent = `v${VERSION}`;
+        
+        // Hide loading screen when A-Frame is ready
+        document.querySelector('a-scene').addEventListener('loaded', function () {
+            document.getElementById('initial-loading-screen').style.display = 'none';
+        });
+
         // Debug mode flag
         const DEBUG = true;
 
@@ -83,113 +187,6 @@
             timeRemaining: 60,
             activeGophers: []
         };
-        
-        // Gun controller component
-        AFRAME.registerComponent('gun-controller', {
-            schema: {
-                hand: {type: 'string', default: 'right'}
-            },
-            
-            init: function() {
-                // Create gun model
-                this.createGunModel();
-                
-                // Set up shooting
-                this.el.addEventListener('triggerdown', this.shoot.bind(this));
-                
-                // Set up haptic feedback
-                this.el.addEventListener('triggerdown', this.triggerHaptic.bind(this));
-            },
-            
-            createGunModel: function() {
-                // Create gun handle
-                const handle = document.createElement('a-box');
-                handle.setAttribute('width', '0.03');
-                handle.setAttribute('height', '0.08');
-                handle.setAttribute('depth', '0.15');
-                handle.setAttribute('position', '0 -0.05 0');
-                handle.setAttribute('rotation', '45 0 0');
-                handle.setAttribute('color', '#333');
-                this.el.appendChild(handle);
-                
-                // Create gun barrel
-                const barrel = document.createElement('a-cylinder');
-                barrel.setAttribute('radius', '0.02');
-                barrel.setAttribute('height', '0.2');
-                barrel.setAttribute('position', '0 0 -0.15');
-                barrel.setAttribute('rotation', '90 0 0');
-                barrel.setAttribute('color', '#222');
-                this.el.appendChild(barrel);
-            },
-            
-            shoot: function() {
-                // Create projectile
-                const projectile = document.createElement('a-sphere');
-                projectile.setAttribute('radius', '0.02');
-                projectile.setAttribute('color', 'cyan');
-                projectile.setAttribute('material', 'emissive: cyan; emissiveIntensity: 0.5');
-                
-                // Get controller position and direction
-                const controllerObject = this.el.object3D;
-                const position = new THREE.Vector3();
-                const direction = new THREE.Vector3(0, 0, -1);
-                
-                controllerObject.getWorldPosition(position);
-                direction.applyQuaternion(controllerObject.quaternion);
-                
-                // Position projectile at gun barrel
-                projectile.setAttribute('position', position);
-                
-                // Add to scene
-                document.querySelector('a-scene').appendChild(projectile);
-                
-                // Animate projectile
-                const animation = document.createElement('a-animation');
-                animation.setAttribute('attribute', 'position');
-                animation.setAttribute('to', `${position.x + direction.x * 10} ${position.y + direction.y * 10} ${position.z + direction.z * 10}`);
-                animation.setAttribute('dur', '1000');
-                animation.setAttribute('easing', 'linear');
-                projectile.appendChild(animation);
-                
-                // Remove projectile after animation
-                setTimeout(() => {
-                    if (projectile.parentNode) {
-                        projectile.parentNode.removeChild(projectile);
-                    }
-                }, 1000);
-                
-                // Animate gun recoil
-                this.animateRecoil();
-            },
-            
-            animateRecoil: function() {
-                // Get current position
-                const currentPosition = this.el.getAttribute('position');
-                
-                // Create animation
-                const animation = document.createElement('a-animation');
-                animation.setAttribute('attribute', 'position');
-                animation.setAttribute('from', `${currentPosition.x} ${currentPosition.y} ${currentPosition.z}`);
-                animation.setAttribute('to', `${currentPosition.x} ${currentPosition.y} ${currentPosition.z + 0.05}`);
-                animation.setAttribute('dur', '50');
-                animation.setAttribute('easing', 'ease-out');
-                animation.setAttribute('direction', 'alternate');
-                animation.setAttribute('repeat', '1');
-                this.el.appendChild(animation);
-            },
-            
-            triggerHaptic: function() {
-                // Trigger haptic feedback if available
-                if (this.el.components['oculus-touch-controls']) {
-                    const gamepad = this.el.components['oculus-touch-controls'].controllerPresent ? 
-                                   this.el.components['oculus-touch-controls'].controller : null;
-                    
-                    if (gamepad && gamepad.hapticActuators && gamepad.hapticActuators.length > 0) {
-                        gamepad.hapticActuators[0].pulse(0.5, 100);
-                    }
-                }
-            }
-        });
 
         // Register game manager component
         AFRAME.registerComponent('game-manager', {
@@ -213,6 +210,12 @@
                 this.gopherPool = [];
                 this.createGopherPool(10); // Pre-create 10 gophers
                 
+                // Initialize projectile tracking
+                window.activeProjectiles = [];
+                
+                // Set up animation loop for projectiles
+                this.tick = AFRAME.utils.throttleTick(this.tick, 16, this);
+                
                 // Debug logging
                 if (DEBUG) {
                     console.log('Debug mode enabled');
@@ -220,6 +223,79 @@
                 }
             },
             
+            tick: function(time, deltaTime) {
+                // Update projectiles
+                this.updateProjectiles(deltaTime / 1000); // Convert to seconds
+                
+                // Check for hits
+                this.checkHits();
+            },
+            
+            updateProjectiles: function(deltaTime) {
+                if (!window.activeProjectiles) return;
+                
+                // Update each projectile position
+                for (let i = window.activeProjectiles.length - 1; i >= 0; i--) {
+                    const projectile = window.activeProjectiles[i];
+                    
+                    // Update distance traveled
+                    projectile.distance += projectile.speed * deltaTime;
+                    
+                    // Calculate new position
+                    const newPosition = new THREE.Vector3();
+                    newPosition.copy(projectile.startPosition);
+                    newPosition.addScaledVector(projectile.direction, projectile.distance);
+                    
+                    // Update projectile position
+                    projectile.element.setAttribute('position', newPosition);
+                    
+                    // Remove if traveled max distance
+                    if (projectile.distance >= projectile.maxDistance) {
+                        if (projectile.element.parentNode) {
+                            projectile.element.parentNode.removeChild(projectile.element);
+                        }
+                        window.activeProjectiles.splice(i, 1);
+                    }
+                }
+            },
+            
+            checkHits: function() {
+                if (!window.activeProjectiles || !gameState.activeGophers) return;
+                
+                // Check each projectile against each gopher
+                for (let i = window.activeProjectiles.length - 1; i >= 0; i--) {
+                    const projectile = window.activeProjectiles[i];
+                    const projectilePos = new THREE.Vector3();
+                    projectilePos.copy(projectile.startPosition);
+                    projectilePos.addScaledVector(projectile.direction, projectile.distance);
+                    
+                    for (let j = gameState.activeGophers.length - 1; j >= 0; j--) {
+                        const gopher = gameState.activeGophers[j];
+                        
+                        // Skip if gopher is not visible or already hit
+                        if (!gopher.gopherData || gopher.gopherData.hit || gopher.gopherData.state !== 'visible') continue;
+                        
+                        // Get gopher position
+                        const gopherPos = new THREE.Vector3();
+                        gopher.object3D.getWorldPosition(gopherPos);
+                        
+                        // Check distance
+                        const distance = projectilePos.distanceTo(gopherPos);
+                        if (distance < 0.3) { // Hit radius
+                            // Hit detected!
+                            this.hitGopher(gopher);
+                            
+                            // Remove projectile
+                            if (projectile.element.parentNode) {
+                                projectile.element.parentNode.removeChild(projectile.element);
+                            }
+                            window.activeProjectiles.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+            },
+
             onTriggerDown: function(event) {
                 // If floor not marked yet, use this trigger pull to mark the floor
                 if (!gameState.floorMarked) {
@@ -231,7 +307,7 @@
                     this.shoot(event.target);
                 }
             },
-            
+
             markFloor: function(controller) {
                 console.log('Marking floor');
                 
@@ -259,7 +335,7 @@
                 
                 console.log('Floor marked at', position.x, 0, position.z);
             },
-            
+
             startGame: function() {
                 console.log('Starting game');
                 
@@ -283,7 +359,7 @@
                 
                 console.log('Game started');
             },
-            
+
             createGameUI: function() {
                 // Create score display
                 const scoreDisplay = document.createElement('a-entity');
@@ -299,7 +375,7 @@
                 timerDisplay.setAttribute('text', 'value: Time: 60; width: 1; align: center; color: white;');
                 document.querySelector('#camera').appendChild(timerDisplay);
             },
-            
+
             startTimer: function() {
                 // Start countdown timer
                 this.timer = setInterval(() => {
@@ -315,7 +391,7 @@
                     }
                 }, 1000);
             },
-            
+
             endGame: function() {
                 console.log('Game over');
                 
@@ -353,15 +429,19 @@
                 // Check for hits against active gophers
                 const hits = [];
                 gameState.activeGophers.forEach(gopher => {
-                    // Simple distance-based hit detection
+                    // Skip if gopher is not visible or already hit
+                    if (!gopher.gopherData || gopher.gopherData.hit || gopher.gopherData.state !== 'visible') return;
+                    
+                    // Get gopher position
                     const gopherPos = new THREE.Vector3();
                     gopher.object3D.getWorldPosition(gopherPos);
                     
+                    // Check if ray intersects gopher
                     const distance = position.distanceTo(gopherPos);
                     const dot = direction.dot(gopherPos.sub(position).normalize());
                     
                     // If gopher is in front of controller and within reasonable distance
-                    if (dot > 0.7 && distance < 5) {
+                    if (dot > 0.7 && distance < 10) {
                         hits.push({
                             gopher: gopher,
                             distance: distance
@@ -423,7 +503,7 @@
                 animation.setAttribute('easing', 'ease-in');
                 gopher.appendChild(animation);
             },
-            
+
             createGopherPool: function(count) {
                 for (let i = 0; i < count; i++) {
                     const gopher = this.createGopher();
@@ -617,53 +697,6 @@
                     }
                 }, delay);
             },
-            
-            createDebugPanel: function() {
-                // Create debug panel
-                const debugPanel = document.createElement('a-entity');
-                debugPanel.setAttribute('id', 'debugPanel');
-                debugPanel.setAttribute('position', '0 -0.3 -1');
-                debugPanel.setAttribute('text', 'value: DEBUG MODE; width: 0.5; align: left; color: red;');
-                document.querySelector('#camera').appendChild(debugPanel);
-                
-                // Update debug info periodically
-                setInterval(() => {
-                    if (!debugPanel) return;
-                    
-                    const debugInfo = `DEBUG INFO:
-Floor Marked: ${gameState.floorMarked}
-Game Active: ${gameState.isPlaying}
-Score: ${gameState.score}
-Time: ${gameState.timeRemaining}
-Active Gophers: ${gameState.activeGophers.length}
-Gopher Pool: ${this.gopherPool ? this.gopherPool.length : 0}`;
-                    
-                    debugPanel.setAttribute('text', `value: ${debugInfo}; width: 0.5; align: left; color: red;`);
-                }, 500);
-            }
-        });
-
-        // Check for WebXR support when page loads
-        window.addEventListener('load', function() {
-            if (!navigator.xr) {
-                document.getElementById('unsupported-message').style.display = 'block';
-                console.error('WebXR not supported');
-                return;
-            }
-
-            // Check for immersive-ar support
-            navigator.xr.isSessionSupported('immersive-ar')
-                .then(supported => {
-                    if (!supported) {
-                        document.getElementById('unsupported-message').style.display = 'block';
-                        console.error('Immersive AR not supported');
-                    }
-                })
-                .catch(err => {
-                    console.error('Error checking AR support:', err);
-                    document.getElementById('unsupported-message').style.display = 'block';
-                });
-        });
     </script>
 </body>
 </html>
