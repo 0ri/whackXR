@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>WhackXR v11.0</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+        
+        .splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+        }
+
+        .splash-screen h1 {
+            font-size: 3em;
+            margin-bottom: 0.5em;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .splash-screen p {
+            font-size: 1.2em;
+            margin: 0.5em 0;
+            color: #8a8a8a;
+        }
+
+        .version {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: #8a8a8a;
+            font-family: monospace;
+        }
+
+        .error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+
+        .requirements {
+            margin-top: 2em;
+            padding: 1em;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .requirements h2 {
+            color: #FFD700;
+            margin-bottom: 0.5em;
+        }
+
+        .requirements ul {
+            list-style: none;
+            padding: 0;
+            text-align: left;
+        }
+
+        .requirements li {
+            margin: 0.5em 0;
+            color: #8a8a8a;
+        }
+
+        .requirements li::before {
+            content: "•";
+            color: #FFD700;
+            margin-right: 0.5em;
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-screen" id="splash-screen">
+        <h1>WhackXR</h1>
+        <p>A WebXR Whack-a-Gopher Game</p>
+        <div class="requirements">
+            <h2>Requirements</h2>
+            <ul>
+                <li>Meta Quest (2, 3, Pro)</li>
+                <li>Oculus Browser 15.0+</li>
+                <li>WebXR support</li>
+                <li>Clear play area (3m × 3m recommended)</li>
+            </ul>
+        </div>
+        <div class="version">v11.0</div>
+    </div>
+
+    <div id="unsupported-message" class="error-message">
+        <h2>WebXR Not Supported</h2>
+        <p>Please use an Oculus Browser 15.0+ on Meta Quest.</p>
+        <p>Make sure you have WebXR enabled.</p>
+    </div>
+
+    <a-scene 
+        webxr="requiredFeatures: local-floor, hit-test;"
+        renderer="antialias: true; precision: medium;"
+        loading-screen="dotsColor: white; backgroundColor: #1a1a2e"
+        game-manager>
+        
+        <!-- Camera rig -->
+        <a-entity id="rig" position="0 0 0">
+            <a-entity id="camera" camera look-controls wasd-controls="enabled: false"></a-entity>
+            <a-entity id="left-controller" oculus-touch-controls="hand: left"></a-entity>
+            <a-entity id="right-controller" oculus-touch-controls="hand: right"></a-entity>
+        </a-entity>
+
+        <!-- Game containers -->
+        <a-entity id="floor-container"></a-entity>
+        <a-entity id="gopher-container"></a-entity>
+        <a-entity id="ui-container"></a-entity>
+    </a-scene>
+
+    <script>
+    // Hide splash screen when entering VR
+    document.querySelector('a-scene').addEventListener('enter-vr', function() {
+        document.getElementById('splash-screen').style.display = 'none';
+    });
+    
+    // Gopher Component - MUST BE REGISTERED FIRST
+    AFRAME.registerComponent('gopher', {
+        schema: {
+            type: {type: 'string', default: 'standard'}, // standard, fast, or bonus
+            points: {type: 'number', default: 10}
+        },
+
+        init: function() {
+            console.log('Gopher component initialized with type:', this.data.type);
+            this.isAlive = true;
+            this.setupModel();
+            this.setupAnimation();
+            
+            // Add class for collision detection
+            this.el.classList.add('gopher-target');
+        },
+
+        setupModel: function() {
+            // Create gopher geometry - 50% smaller than before
+            const head = document.createElement('a-sphere');
+            const body = document.createElement('a-cylinder');
+            const eyes = document.createElement('a-entity');
+            
+            // Set properties based on type
+            let color;
+            switch(this.data.type) {
+                case 'fast':
+                    color = '#FF4500';
+                    this.data.points = 25;
+                    break;
+                case 'bonus':
+                    color = '#FFD700';
+                    this.data.points = 50;
+                    break;
+                default:
+                    color = '#8B4513';
+                    this.data.points = 10;
+            }
+
+            // Head - 50% smaller
+            head.setAttribute('color', color);
+            head.setAttribute('radius', '0.075'); // Was 0.15
+            head.setAttribute('position', '0 0.15 0'); // Was 0.3
+
+            // Body - 50% smaller
+            body.setAttribute('color', color);
+            body.setAttribute('radius', '0.06'); // Was 0.12
+            body.setAttribute('height', '0.15'); // Was 0.3
+            body.setAttribute('position', '0 0 0');
+            
+            // Eyes - 50% smaller
+            const leftEye = document.createElement('a-sphere');
+            leftEye.setAttribute('color', 'black');
+            leftEye.setAttribute('radius', '0.015'); // Was 0.03
+            leftEye.setAttribute('position', '-0.035 0.175 0.06'); // Was -0.07 0.35 0.12
+            
+            const rightEye = document.createElement('a-sphere');
+            rightEye.setAttribute('color', 'black');
+            rightEye.setAttribute('radius', '0.015'); // Was 0.03
+            rightEye.setAttribute('position', '0.035 0.175 0.06'); // Was 0.07 0.35 0.12
+            
+            eyes.appendChild(leftEye);
+            eyes.appendChild(rightEye);
+
+            this.el.appendChild(head);
+            this.el.appendChild(body);
+            this.el.appendChild(eyes);
+            
+            // Add a nose - 50% smaller
+            const nose = document.createElement('a-sphere');
+            nose.setAttribute('color', 'black');
+            nose.setAttribute('radius', '0.01'); // Was 0.02
+            nose.setAttribute('position', '0 0.15 0.075'); // Was 0 0.3 0.15
+            this.el.appendChild(nose);
+            
+            // Add special effects for bonus gopher
+            if (this.data.type === 'bonus') {
+                const glow = document.createElement('a-sphere');
+                glow.setAttribute('color', '#FFFF00');
+                glow.setAttribute('radius', '0.1'); // Was 0.2
+                glow.setAttribute('position', '0 0.15 0'); // Was 0 0.3 0
+                glow.setAttribute('material', 'transparent: true; opacity: 0.3');
+                glow.setAttribute('animation', {
+                    property: 'scale',
+                    from: '0.9 0.9 0.9',
+                    to: '1.1 1.1 1.1',
+                    dur: 1000,
+                    dir: 'alternate',
+                    loop: true,
+                    easing: 'easeInOutSine'
+                });
+                this.el.appendChild(glow);
+            }
+        },
+
+        setupAnimation: function() {
+            // Start position is below ground
+            this.el.object3D.position.y = -0.25; // Was -0.5
+            
+            // Emerge animation
+            this.el.setAttribute('animation__emerge', {
+                property: 'object3D.position.y',
+                from: -0.25, // Was -0.5
+                to: 0,
+                dur: 500,
+                easing: 'easeOutCubic',
+                startEvents: 'emerge'
+            });
+
+            // Retreat animation
+            this.el.setAttribute('animation__retreat', {
+                property: 'object3D.position.y',
+                from: 0,
+                to: -0.25, // Was -0.5
+                dur: 500,
+                easing: 'easeInCubic',
+                startEvents: 'retreat'
+            });
+            
+            // Add wiggle animation for more character
+            this.el.setAttribute('animation__wiggle', {
+                property: 'rotation.y',
+                from: -5,
+                to: 5,
+                dur: 1000,
+                dir: 'alternate',
+                loop: true,
+                easing: 'easeInOutSine',
+                startEvents: 'emerge'
+            });
+        },
+
+        emerge: function() {
+            console.log('Gopher emerging');
+            if (!this.isAlive) return;
+            this.el.emit('emerge');
+            
+            // Set retreat timeout based on type
+            const duration = this.data.type === 'fast' ? 1000 : 2000;
+            this.retreatTimer = setTimeout(() => this.retreat(), duration);
+        },
+
+        retreat: function() {
+            console.log('Gopher retreating');
+            if (!this.isAlive) return;
+            this.el.emit('retreat');
+            
+            // Remove after retreat animation
+            setTimeout(() => {
+                if (this.el.parentNode) {
+                    this.el.parentNode.removeChild(this.el);
+                }
+            }, 500);
+        },
+
+        hit: function() {
+            console.log('Gopher hit!');
+            if (!this.isAlive) return;
+            this.isAlive = false;
+            
+            // Clear retreat timer if it exists
+            if (this.retreatTimer) {
+                clearTimeout(this.retreatTimer);
+            }
+            
+            // Create hit effect
+            const hitEffect = document.createElement('a-entity');
+            hitEffect.setAttribute('position', this.el.getAttribute('position'));
+            
+            // Create particles for explosion
+            for (let i = 0; i < 10; i++) {
+                const particle = document.createElement('a-sphere');
+                particle.setAttribute('radius', 0.015); // Was 0.03
+                particle.setAttribute('color', '#FFD700');
+                
+                // Random position offset
+                const x = (Math.random() - 0.5) * 0.05; // Was 0.1
+                const y = (Math.random() - 0.5) * 0.05; // Was 0.1
+                const z = (Math.random() - 0.5) * 0.05; // Was 0.1
+                particle.setAttribute('position', `${x} ${y} ${z}`);
+                
+                // Animation
+                particle.setAttribute('animation', {
+                    property: 'position',
+                    to: `${x*5} ${y*5+0.5} ${z*5}`,
+                    dur: 500,
+                    easing: 'easeOutQuad'
+                });
+                
+                particle.setAttribute('animation__fade', {
+                    property: 'opacity',
+                    from: 1.0,
+                    to: 0.0,
+                    dur: 500,
+                    easing: 'easeOutQuad'
+                });
+                
+                hitEffect.appendChild(particle);
+            }
+            
+            this.el.sceneEl.appendChild(hitEffect);
+            
+            // Remove hit effect after animation
+            setTimeout(() => {
+                if (hitEffect.parentNode) {
+                    hitEffect.parentNode.removeChild(hitEffect);
+                }
+            }, 500);
+            
+            // Show score popup
+            this.showScorePopup();
+            
+            // Trigger hit effects and score update
+            this.el.sceneEl.emit('gopher-hit', {points: this.data.points});
+            
+            // Retreat immediately
+            this.retreat();
+        },
+        
+        showScorePopup: function() {
+            // Create score popup text
+            const scorePopup = document.createElement('a-text');
+            scorePopup.setAttribute('value', `+${this.data.points}`);
+            scorePopup.setAttribute('color', this.data.type === 'bonus' ? '#FFD700' : 'white');
+            scorePopup.setAttribute('align', 'center');
+            
+            // Position above gopher
+            const position = this.el.getAttribute('position');
+            scorePopup.setAttribute('position', {
+                x: position.x,
+                y: position.y + 0.25, // Was 0.5
+                z: position.z
+            });
+            
+            // Add to scene
+            this.el.sceneEl.appendChild(scorePopup);
+            
+            // Animate upward and fade out
+            scorePopup.setAttribute('animation', {
+                property: 'position.y',
+                from: position.y + 0.25, // Was 0.5
+                to: position.y + 0.5, // Was 1.0
+                dur: 1000,
+                easing: 'easeOutQuad'
+            });
+            
+            scorePopup.setAttribute('animation__fade', {
+                property: 'opacity',
+                from: 1.0,
+                to: 0.0,
+                dur: 1000,
+                easing: 'easeOutQuad'
+            });
+            
+            // Remove after animation
+            setTimeout(() => {
+                if (scorePopup.parentNode) {
+                    scorePopup.parentNode.removeChild(scorePopup);
+                }
+            }, 1000);
+        }
+    });
+        defaultComponents: {
+            geometry: {
+                primitive: 'plane',
+                width: 3,
+                height: 3,
+                segmentsWidth: 15,
+                segmentsHeight: 15
+            },
+            material: {
+                color: '#8B4513', // Brown dirt color
+                opacity: 0.5,     // 50% opacity
+                transparent: true,
+                wireframe: false   // Solid surface instead of wireframe
+            }
+        },
+        mappings: {
+            width: 'geometry.width',
+            height: 'geometry.height',
+            color: 'material.color',
+            opacity: 'material.opacity'
+        }
+    });
+    </script>
+</body>
+</html>
