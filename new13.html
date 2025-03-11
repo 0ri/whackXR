@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>WhackXR v13.0</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+        
+        .splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+        }
+
+        .splash-screen h1 {
+            font-size: 3em;
+            margin-bottom: 0.5em;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .splash-screen p {
+            font-size: 1.2em;
+            margin: 0.5em 0;
+            color: #8a8a8a;
+        }
+
+        .version {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: #8a8a8a;
+            font-family: monospace;
+        }
+
+        .error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+
+        .requirements {
+            margin-top: 2em;
+            padding: 1em;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .requirements h2 {
+            color: #FFD700;
+            margin-bottom: 0.5em;
+        }
+
+        .requirements ul {
+            list-style: none;
+            padding: 0;
+            text-align: left;
+        }
+
+        .requirements li {
+            margin: 0.5em 0;
+            color: #8a8a8a;
+        }
+
+        .requirements li::before {
+            content: "•";
+            color: #FFD700;
+            margin-right: 0.5em;
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-screen" id="splash-screen">
+        <h1>WhackXR</h1>
+        <p>A WebXR Whack-a-Gopher Game</p>
+        <div class="requirements">
+            <h2>Requirements</h2>
+            <ul>
+                <li>Meta Quest (2, 3, Pro)</li>
+                <li>Oculus Browser 15.0+</li>
+                <li>WebXR support</li>
+                <li>Clear play area (3m × 3m recommended)</li>
+            </ul>
+        </div>
+        <div class="version">v13.0</div>
+    </div>
+
+    <div id="unsupported-message" class="error-message">
+        <h2>WebXR Not Supported</h2>
+        <p>Please use an Oculus Browser 15.0+ on Meta Quest.</p>
+        <p>Make sure you have WebXR enabled.</p>
+    </div>
+
+    <a-scene 
+        webxr="requiredFeatures: local-floor, hit-test;"
+        renderer="antialias: true; precision: medium;"
+        loading-screen="dotsColor: white; backgroundColor: #1a1a2e"
+        game-manager>
+        
+        <!-- Camera rig -->
+        <a-entity id="rig" position="0 0 0">
+            <a-entity id="camera" camera look-controls wasd-controls="enabled: false"></a-entity>
+            <a-entity id="left-controller" oculus-touch-controls="hand: left"></a-entity>
+            <a-entity id="right-controller" oculus-touch-controls="hand: right"></a-entity>
+        </a-entity>
+
+        <!-- Game containers -->
+        <a-entity id="floor-container"></a-entity>
+        <a-entity id="gopher-container"></a-entity>
+        <a-entity id="ui-container"></a-entity>
+    </a-scene>
+
+    <script>
+    // Testing Framework
+    const TestFramework = {
+        tests: [],
+        
+        addTest: function(name, testFn) {
+            this.tests.push({ name, testFn });
+        },
+        
+        runTests: function() {
+            console.log('Running tests...');
+            let passed = 0;
+            let failed = 0;
+            
+            this.tests.forEach(test => {
+                try {
+                    test.testFn();
+                    console.log(`✅ PASS: ${test.name}`);
+                    passed++;
+                } catch (e) {
+                    console.error(`❌ FAIL: ${test.name}`);
+                    console.error(e);
+                    failed++;
+                }
+            });
+            
+            console.log(`Tests complete: ${passed} passed, ${failed} failed`);
+            return failed === 0;
+        }
+    };
+
+    // Hide splash screen when entering VR
+    document.querySelector('a-scene').addEventListener('enter-vr', function() {
+        document.getElementById('splash-screen').style.display = 'none';
+    });
+    
+    // Register A-Frame primitives
+    AFRAME.registerPrimitive('a-grid', {
+        defaultComponents: {
+            geometry: {
+                primitive: 'plane',
+                width: 3,  // Updated to 3m
+                height: 3, // Updated to 3m
+                segmentsWidth: 15, // Increased segments for larger grid
+                segmentsHeight: 15
+            },
+            material: {
+                color: '#8B4513', // Changed to brown
+                opacity: 0.5,
+                transparent: true,
+                wireframe: true
+            }
+        },
+        mappings: {
+            width: 'geometry.width',
+            height: 'geometry.height',
+            color: 'material.color'
+        }
+    });
+
+    // Gopher Component - MUST BE REGISTERED FIRST
+    AFRAME.registerComponent('gopher', {
+        schema: {
+            type: {type: 'string', default: 'standard'}, // standard, fast, or bonus
+            points: {type: 'number', default: 10}
+        },
+
+        init: function() {
+            console.log('Gopher component initialized with type:', this.data.type);
+            this.isAlive = true;
+            this.setupModel();
+            this.setupAnimation();
+            
+            // Add class for collision detection
+            this.el.classList.add('gopher-target');
+        },
+
+        setupModel: function() {
+            // Create gopher geometry
+            const head = document.createElement('a-sphere');
+            const body = document.createElement('a-cylinder');
+            const eyes = document.createElement('a-entity');
+            
+            // Set properties based on type
+            let color;
+            switch(this.data.type) {
+                case 'fast':
+                    color = '#FF4500';
+                    this.data.points = 25;
+                    break;
+                case 'bonus':
+                    color = '#FFD700';
+                    this.data.points = 50;
+                    break;
+                default:
+                    color = '#8B4513';
+                    this.data.points = 10;
+            }
+
+            // Head
+            head.setAttribute('color', color);
+            head.setAttribute('radius', '0.075'); // Reduced from 0.15
+            head.setAttribute('position', '0 0.15 0'); // Adjusted position
+
+            // Body
+            body.setAttribute('color', color);
+            body.setAttribute('radius', '0.06'); // Reduced from 0.12
+            body.setAttribute('height', '0.15'); // Reduced from 0.3
+            body.setAttribute('position', '0 0 0');
+            
+            // Eyes (for more character)
+            const leftEye = document.createElement('a-sphere');
+            leftEye.setAttribute('color', 'black');
+            leftEye.setAttribute('radius', '0.015'); // Reduced from 0.03
+            leftEye.setAttribute('position', '-0.035 0.175 0.06'); // Adjusted position
+            
+            const rightEye = document.createElement('a-sphere');
+            rightEye.setAttribute('color', 'black');
+            rightEye.setAttribute('radius', '0.015'); // Reduced from 0.03
+            rightEye.setAttribute('position', '0.035 0.175 0.06'); // Adjusted position
+            
+            eyes.appendChild(leftEye);
+            eyes.appendChild(rightEye);
+
+            this.el.appendChild(head);
+            this.el.appendChild(body);
+            this.el.appendChild(eyes);
+            
+            // Add a nose
+            const nose = document.createElement('a-sphere');
+            nose.setAttribute('color', 'black');
+            nose.setAttribute('radius', '0.01'); // Reduced from 0.02
+            nose.setAttribute('position', '0 0.15 0.075'); // Adjusted position
+            this.el.appendChild(nose);
+            
+            // Add special effects for bonus gopher
+            if (this.data.type === 'bonus') {
+                const glow = document.createElement('a-sphere');
+                glow.setAttribute('color', '#FFFF00');
+                glow.setAttribute('radius', '0.1'); // Reduced from 0.2
+                glow.setAttribute('position', '0 0.15 0'); // Adjusted position
+                glow.setAttribute('material', 'transparent: true; opacity: 0.3');
+                glow.setAttribute('animation', {
+                    property: 'scale',
+                    from: '0.9 0.9 0.9',
+                    to: '1.1 1.1 1.1',
+                    dur: 1000,
+                    dir: 'alternate',
+                    loop: true,
+                    easing: 'easeInOutSine'
+                });
+                this.el.appendChild(glow);
+            }
+        },
+
+        setupAnimation: function() {
+            // Start position is below ground
+            this.el.object3D.position.y = -0.25; // Reduced from -0.5 for smaller gopher
+            
+            // Emerge animation
+            this.el.setAttribute('animation__emerge', {
+                property: 'object3D.position.y',
+                from: -0.25, // Reduced from -0.5
+                to: 0,
+                dur: 500,
+                easing: 'easeOutCubic',
+                startEvents: 'emerge'
+            });
+
+            // Retreat animation
+            this.el.setAttribute('animation__retreat', {
+                property: 'object3D.position.y',
+                from: 0,
+                to: -0.25, // Reduced from -0.5
+                dur: 500,
+                easing: 'easeInCubic',
+                startEvents: 'retreat'
+            });
+            
+            // Add wiggle animation for more character
+            this.el.setAttribute('animation__wiggle', {
+                property: 'rotation.y',
+                from: -5,
+                to: 5,
+                dur: 1000,
+                dir: 'alternate',
+                loop: true,
+                easing: 'easeInOutSine',
+                startEvents: 'emerge'
+            });
+        },
+
+        emerge: function() {
+            console.log('Gopher emerging');
+            if (!this.isAlive) return;
+            this.el.emit('emerge');
+            
+            // Set retreat timeout based on type
+            const duration = this.data.type === 'fast' ? 1000 : 2000;
+            this.retreatTimer = setTimeout(() => this.retreat(), duration);
+        },
+
+        retreat: function() {
+            console.log('Gopher retreating');
+            if (!this.isAlive) return;
+            this.el.emit('retreat');
+            
+            // Remove after retreat animation
+            setTimeout(() => {
+                if (this.el.parentNode) {
+                    this.el.parentNode.removeChild(this.el);
+                }
+            }, 500);
+        },
+
+        hit: function() {
+            console.log('Gopher hit!');
+            if (!this.isAlive) return;
+            this.isAlive = false;
+            
+            // Clear retreat timer if it exists
+            if (this.retreatTimer) {
+                clearTimeout(this.retreatTimer);
+            }
+            
+            // Create hit effect
+            const hitEffect = document.createElement('a-entity');
+            hitEffect.setAttribute('position', this.el.getAttribute('position'));
+            
+            // Create particles for explosion
+            for (let i = 0; i < 10; i++) {
+                const particle = document.createElement('a-sphere');
+                particle.setAttribute('radius', 0.015); // Reduced from 0.03
+                particle.setAttribute('color', '#FFD700');
+                
+                // Random position offset - 50% smaller
+                const x = (Math.random() - 0.5) * 0.05; // Reduced from 0.1
+                const y = (Math.random() - 0.5) * 0.05; // Reduced from 0.1
+                const z = (Math.random() - 0.5) * 0.05; // Reduced from 0.1
+                particle.setAttribute('position', `${x} ${y} ${z}`);
+                
+                // Animation
+                particle.setAttribute('animation', {
+                    property: 'position',
+                    to: `${x*5} ${y*5+0.25} ${z*5}`, // Reduced height from 0.5 to 0.25
+                    dur: 500,
+                    easing: 'easeOutQuad'
+                });
+                
+                particle.setAttribute('animation__fade', {
+                    property: 'opacity',
+                    from: 1.0,
+                    to: 0.0,
+                    dur: 500,
+                    easing: 'easeOutQuad'
+                });
+                
+                hitEffect.appendChild(particle);
+            }
+            
+            this.el.sceneEl.appendChild(hitEffect);
+            
+            // Remove hit effect after animation
+            setTimeout(() => {
+                if (hitEffect.parentNode) {
+                    hitEffect.parentNode.removeChild(hitEffect);
+                }
+            }, 500);
+            
+            // Show score popup
+            this.showScorePopup();
+            
+            // Trigger hit effects and score update
+            this.el.sceneEl.emit('gopher-hit', {points: this.data.points});
+            
+            // Retreat immediately
+            this.retreat();
+        },
+        
+        showScorePopup: function() {
+            // Create score popup text
+            const scorePopup = document.createElement('a-text');
+            scorePopup.setAttribute('value', `+${this.data.points}`);
+            scorePopup.setAttribute('color', this.data.type === 'bonus' ? '#FFD700' : 'white');
+            scorePopup.setAttribute('align', 'center');
+            
+            // Position above gopher
+            const position = this.el.getAttribute('position');
+            scorePopup.setAttribute('position', {
+                x: position.x,
+                y: position.y + 0.25, // Reduced from 0.5
+                z: position.z
+            });
+            
+            // Add to scene
+            this.el.sceneEl.appendChild(scorePopup);
+            
+            // Animate upward and fade out
+            scorePopup.setAttribute('animation', {
+                property: 'position.y',
+                from: position.y + 0.25, // Reduced from 0.5
+                to: position.y + 0.5, // Reduced from 1.0
+                dur: 1000,
+                easing: 'easeOutQuad'
+            });
+            
+            scorePopup.setAttribute('animation__fade', {
+                property: 'opacity',
+                from: 1.0,
+                to: 0.0,
+                dur: 1000,
+                easing: 'easeOutQuad'
+            });
+            
+            // Remove after animation
+            setTimeout(() => {
+                if (scorePopup.parentNode) {
+                    scorePopup.parentNode.removeChild(scorePopup);
+                }
+            }, 1000);
+        }
+    });
+    
+    // Floor Detection Component
+    AFRAME.registerComponent('floor-detector', {
+        schema: {
+            minArea: {default: 3}, // Updated from 2 to 3 meters
+        },
+        
+        init: function() {
+            this.isFloorSet = false;
+            this.floorPosition = new THREE.Vector3();
+            this.floorMarker = null;
+            this.playArea = null;
+            
+            this.el.sceneEl.addEventListener('enter-vr', this.onEnterVR.bind(this));
+        },
+        
+        onEnterVR: function() {
+            if (this.isFloorSet) return;
+            
+            // Create floor marker to guide user
+            this.createFloorMarker();
+            
+            // Setup hit testing
+            this.setupHitTesting();
+            
+            // Create UI message to instruct user
+            this.createInstructionUI();
+        },
+        
+        createFloorMarker: function() {
+            // Create a ring to show where the floor is detected
+            this.floorMarker = document.createElement('a-ring');
+            this.floorMarker.setAttribute('color', '#22CCFF');
+            this.floorMarker.setAttribute('radius-inner', 0.1);
+            this.floorMarker.setAttribute('radius-outer', 0.15);
+            this.floorMarker.setAttribute('rotation', '-90 0 0');
+            this.floorMarker.setAttribute('position', '0 -0.1 -0.5');
+            this.floorMarker.setAttribute('material', 'opacity: 0.7; transparent: true');
+            this.floorMarker.setAttribute('visible', 'false');
+            this.el.sceneEl.appendChild(this.floorMarker);
+        },
+        
+        setupHitTesting: function() {
+            // Set up controller event listeners for hit testing
+            const controllers = document.querySelectorAll('[oculus-touch-controls]');
+            controllers.forEach(controller => {
+                controller.addEventListener('triggerdown', this.onTriggerDown.bind(this));
+            });
+        },
+        
+        createInstructionUI: function() {
+            // Create text instruction for floor marking
+            const instruction = document.createElement('a-text');
+            instruction.setAttribute('id', 'floor-instruction');
+            instruction.setAttribute('value', 'Point at floor and press trigger to set play area');
+            instruction.setAttribute('align', 'center');
+            instruction.setAttribute('color', 'white');
+            instruction.setAttribute('position', '0 1.6 -1');
+            instruction.setAttribute('scale', '0.5 0.5 0.5');
+            this.el.sceneEl.appendChild(instruction);
+        },
+        
+        onTriggerDown: function(event) {
+            if (this.isFloorSet) return;
+            
+            // In a real implementation, we would use WebXR hit testing here
+            // For this demo, we'll simulate floor detection
+            const controller = event.target;
+            const controllerPosition = controller.object3D.position;
+            
+            // Set floor position based on controller position
+            this.floorPosition.set(controllerPosition.x, 0, controllerPosition.z);
+            this.createPlayArea();
+            
+            // Remove instruction and floor marker
+            const instruction = document.getElementById('floor-instruction');
+            if (instruction) instruction.parentNode.removeChild(instruction);
+            if (this.floorMarker) this.floorMarker.parentNode.removeChild(this.floorMarker);
+            
+            this.isFloorSet = true;
+            
+            // Notify game manager that floor is set
+            console.log('Floor set, emitting floor-set event');
+            this.el.sceneEl.emit('floor-set', {position: this.floorPosition});
+        },
+        
+        createPlayArea: function() {
+            // Create a play area grid on the floor
+            this.playArea = document.createElement('a-grid');
+            this.playArea.setAttribute('position', `${this.floorPosition.x} ${this.floorPosition.y} ${this.floorPosition.z}`);
+            this.playArea.setAttribute('rotation', '-90 0 0');
+            this.playArea.setAttribute('width', this.data.minArea);
+            this.playArea.setAttribute('height', this.data.minArea);
+            this.playArea.setAttribute('color', '#228B22');
+            
+            this.el.sceneEl.appendChild(this.playArea);
+        }
+    });
+    
+    // Game Manager Component
+    AFRAME.registerComponent('game-manager', {
+        schema: {
+            state: {type: 'string', default: 'initializing'}, // initializing, ready, playing, finished
+            score: {type: 'number', default: 0},
+            timeRemaining: {type: 'number', default: 60}
+        },
+
+        init: function() {
+            // Check WebXR support
+            if (!navigator.xr) {
+                document.getElementById('unsupported-message').style.display = 'block';
+                return;
+            }
+
+            this.isPlaying = false;
+            this.bindMethods();
+            this.setupEventListeners();
+            this.setupComponents();
+            
+            console.log('Game Manager initialized');
+        },
+
+        bindMethods: function() {
+            this.startGame = this.startGame.bind(this);
+            this.endGame = this.endGame.bind(this);
+            this.updateTimer = this.updateTimer.bind(this);
+            this.updateScore = this.updateScore.bind(this);
+            this.onFloorSet = this.onFloorSet.bind(this);
+        },
+
+        setupEventListeners: function() {
+            console.log('Setting up event listeners');
+            
+            this.el.addEventListener('enter-vr', () => {
+                console.log('Entered VR');
+                this.data.state = 'ready';
+            });
+
+            this.el.addEventListener('floor-set', this.onFloorSet);
+
+            this.el.addEventListener('gopher-hit', (e) => {
+                console.log('Game manager received gopher hit with points:', e.detail.points);
+                this.updateScore(e.detail.points);
+            });
+        },
+
+        onFloorSet: function(event) {
+            console.log('Floor has been set, starting countdown');
+            this.showCountdown();
+        },
+
+        setupComponents: function() {
+            // Create floor detector
+            const floorContainer = document.getElementById('floor-container');
+            floorContainer.setAttribute('floor-detector', '');
+
+            // Setup gopher spawner
+            const gopherContainer = document.getElementById('gopher-container');
+            gopherContainer.setAttribute('gopher-spawner', '');
+
+            // Setup gun controllers
+            const leftController = document.getElementById('left-controller');
+            const rightController = document.getElementById('right-controller');
+            leftController.setAttribute('gun-controller', 'hand: left');
+            rightController.setAttribute('gun-controller', 'hand: right');
+
+            // Setup UI
+            this.setupUI();
+        },
+
+        setupUI: function() {
+            const uiContainer = document.getElementById('ui-container');
+            
+            // Create score display
+            this.scoreDisplay = document.createElement('a-text');
+            this.scoreDisplay.setAttribute('value', 'Score: 0');
+            this.scoreDisplay.setAttribute('position', '0 0.1 -1');
+            this.scoreDisplay.setAttribute('scale', '0.5 0.5 0.5');
+            this.scoreDisplay.setAttribute('align', 'center');
+            this.scoreDisplay.setAttribute('color', 'white');
+            this.scoreDisplay.setAttribute('visible', false);
+            uiContainer.appendChild(this.scoreDisplay);
+            
+            // Create timer display
+            this.timerDisplay = document.createElement('a-text');
+            this.timerDisplay.setAttribute('value', 'Time: 60');
+            this.timerDisplay.setAttribute('position', '0 0 -1');
+            this.timerDisplay.setAttribute('scale', '0.5 0.5 0.5');
+            this.timerDisplay.setAttribute('align', 'center');
+            this.timerDisplay.setAttribute('color', 'white');
+            this.timerDisplay.setAttribute('visible', false);
+            uiContainer.appendChild(this.timerDisplay);
+        },
+
+        showCountdown: function() {
+            console.log('Starting countdown sequence');
+            
+            // Create countdown text
+            const countdown = document.createElement('a-text');
+            countdown.setAttribute('value', 'Starting in 3...');
+            countdown.setAttribute('position', '0 1.6 -1');
+            countdown.setAttribute('scale', '0.5 0.5 0.5');
+            countdown.setAttribute('align', 'center');
+            countdown.setAttribute('color', 'white');
+            this.el.appendChild(countdown);
+            
+            // Countdown sequence
+            setTimeout(() => {
+                console.log('Countdown: 2');
+                countdown.setAttribute('value', 'Starting in 2...');
+            }, 1000);
+            
+            setTimeout(() => {
+                console.log('Countdown: 1');
+                countdown.setAttribute('value', 'Starting in 1...');
+            }, 2000);
+            
+            setTimeout(() => {
+                console.log('Countdown: GO!');
+                countdown.setAttribute('value', 'GO!');
+                this.startGame();
+                setTimeout(() => {
+                    if (countdown.parentNode) {
+                        countdown.parentNode.removeChild(countdown);
+                    }
+                }, 1000);
+            }, 3000);
+        },
+
+        startGame: function() {
+            if (this.data.state !== 'ready') {
+                console.log('Cannot start game, state is:', this.data.state);
+                return;
+            }
+            
+            console.log('Starting game...');
+            this.data.state = 'playing';
+            this.data.score = 0;
+            this.data.timeRemaining = 60;
+            this.isPlaying = true;
+            
+            // Show UI elements
+            this.scoreDisplay.setAttribute('visible', true);
+            this.timerDisplay.setAttribute('visible', true);
+            
+            // Start game timer
+            this.gameTimer = setInterval(this.updateTimer, 1000);
+            
+            // Notify other components
+            console.log('Emitting gameStateChanged event...');
+            this.el.emit('gameStateChanged', {state: 'playing'});
+        },
+
+        updateTimer: function() {
+            if (!this.isPlaying) return;
+            
+            this.data.timeRemaining--;
+            this.timerDisplay.setAttribute('value', `Time: ${this.data.timeRemaining}`);
+            
+            if (this.data.timeRemaining <= 0) {
+                this.endGame();
+            }
+        },
+
+        updateScore: function(points) {
+            this.data.score += points;
+            this.scoreDisplay.setAttribute('value', `Score: ${this.data.score}`);
+        },
+
+        endGame: function() {
+            console.log('Game ending. Final score:', this.data.score);
+            
+            this.isPlaying = false;
+            this.data.state = 'finished';
+            clearInterval(this.gameTimer);
+            
+            // Hide UI elements
+            this.scoreDisplay.setAttribute('visible', false);
+            this.timerDisplay.setAttribute('visible', false);
+            
+            // Show final score
+            const finalScore = document.createElement('a-text');
+            finalScore.setAttribute('value', `Game Over!\nFinal Score: ${this.data.score}\nPress trigger to restart`);
+            finalScore.setAttribute('position', '0 1.6 -1');
+            finalScore.setAttribute('scale', '0.5 0.5 0.5');
+            finalScore.setAttribute('align', 'center');
+            finalScore.setAttribute('color', 'white');
+            this.el.appendChild(finalScore);
+            
+            // Notify other components
+            this.el.emit('gameStateChanged', {state: 'finished'});
+            
+            // Listen for restart
+            const restartListener = (e) => {
+                if (finalScore.parentNode) {
+                    finalScore.parentNode.removeChild(finalScore);
+                }
+                this.data.state = 'ready';
+                this.showCountdown();
+                
+                // Remove listener
+                const controllers = document.querySelectorAll('[oculus-touch-controls]');
+                controllers.forEach(controller => {
+                    controller.removeEventListener('triggerdown', restartListener);
+                });
+            };
+            
+            // Add restart listener to controllers
+            const controllers = document.querySelectorAll('[oculus-touch-controls]');
+            controllers.forEach(controller => {
+                controller.addEventListener('triggerdown', restartListener);
+            });
+        }
+    });
+    // Gopher Spawner Component
+    AFRAME.registerComponent('gopher-spawner', {
+        schema: {
+            maxGophers: {default: 5},
+            spawnInterval: {default: 2000}, // milliseconds
+            playAreaSize: {default: 2} // meters
+        },
+
+        init: function() {
+            console.log('Gopher spawner initialized');
+            this.gophers = new Set();
+            this.isSpawning = false;
+            this.spawnTimer = null;
+            this.spawnCount = 0;
+            this.lastPositions = [];
+
+            // Listen for game state changes
+            this.el.sceneEl.addEventListener('gameStateChanged', this.onGameStateChanged.bind(this));
+        },
+
+        onGameStateChanged: function(e) {
+            console.log('Gopher spawner received game state change:', e.detail.state);
+            if (e.detail.state === 'playing') {
+                this.startSpawning();
+            } else if (e.detail.state === 'finished') {
+                this.stopSpawning();
+            }
+        },
+
+        startSpawning: function() {
+            console.log('Starting to spawn gophers');
+            this.isSpawning = true;
+            this.spawnCount = 0;
+            this.lastPositions = [];
+            this.spawnLoop();
+        },
+
+        stopSpawning: function() {
+            console.log('Stopping gopher spawning');
+            this.isSpawning = false;
+            if (this.spawnTimer) {
+                clearTimeout(this.spawnTimer);
+            }
+            // Remove all existing gophers
+            this.gophers.forEach(gopher => {
+                if (gopher.parentNode) {
+                    gopher.parentNode.removeChild(gopher);
+                }
+            });
+            this.gophers.clear();
+        },
+
+        spawnLoop: function() {
+            if (!this.isSpawning) return;
+
+            console.log('Spawn loop running, current gophers:', this.gophers.size);
+            if (this.gophers.size < this.data.maxGophers) {
+                this.spawnGopher();
+            }
+
+            // Gradually decrease spawn interval as game progresses
+            const baseInterval = this.data.spawnInterval;
+            const minInterval = 800; // Minimum spawn interval in ms
+            const gameProgress = Math.min(this.spawnCount / 30, 1); // Cap at 30 spawns
+            const currentInterval = baseInterval - (baseInterval - minInterval) * gameProgress;
+            
+            // Schedule next spawn
+            this.spawnTimer = setTimeout(() => this.spawnLoop(), currentInterval);
+        },
+
+        spawnGopher: function() {
+            // Create new gopher
+            const gopher = document.createElement('a-entity');
+            
+            // Get floor position from the play area
+            const playArea = document.querySelector('a-grid');
+            if (!playArea) {
+                console.error('No play area found!');
+                return;
+            }
+            
+            const floorPosition = playArea.getAttribute('position');
+            const playAreaSize = playArea.getAttribute('width') || this.data.playAreaSize;
+            
+            // Generate random position within play area
+            let x, z;
+            let attempts = 0;
+            const minDistance = 0.5; // Minimum distance between gophers
+            
+            do {
+                // Random position within play area
+                const halfSize = playAreaSize / 2;
+                x = floorPosition.x + (Math.random() * playAreaSize) - halfSize;
+                z = floorPosition.z + (Math.random() * playAreaSize) - halfSize;
+                
+                // Check if this position is too close to recent positions
+                const tooClose = this.lastPositions.some(pos => {
+                    const dx = pos.x - x;
+                    const dz = pos.z - z;
+                    return Math.sqrt(dx*dx + dz*dz) < minDistance;
+                });
+                
+                if (!tooClose || attempts > 10) break;
+                attempts++;
+            } while (true);
+            
+            // Remember this position
+            this.lastPositions.push({x, z});
+            if (this.lastPositions.length > 5) {
+                this.lastPositions.shift(); // Keep only the 5 most recent positions
+            }
+            
+            // Random gopher type with weighted probability
+            const rand = Math.random();
+            let type = 'standard';
+            if (rand > 0.95) type = 'bonus';
+            else if (rand > 0.80) type = 'fast';
+
+            console.log('Spawning gopher of type:', type, 'at position:', x, 0, z);
+            
+            // Set position and type
+            gopher.setAttribute('position', {x: x, y: -0.5, z: z});
+            gopher.setAttribute('gopher', {type: type});
+            
+            this.el.appendChild(gopher);
+            this.gophers.add(gopher);
+            this.spawnCount++;
+
+            // Wait for component to initialize before calling emerge
+            gopher.addEventListener('loaded', () => {
+                if (gopher.components.gopher) {
+                    console.log('Gopher emerging');
+                    gopher.components.gopher.emerge();
+                } else {
+                    console.error('Gopher component not initialized');
+                }
+            });
+
+            // Listen for removal
+            gopher.addEventListener('removed', () => {
+                this.gophers.delete(gopher);
+            });
+        }
+    });
+    
+    // Gun Controller Component
+    AFRAME.registerComponent('gun-controller', {
+        schema: {
+            hand: {type: 'string', default: 'right'},
+            fireRate: {type: 'number', default: 500} // milliseconds between shots
+        },
+
+        init: function() {
+            this.canFire = true;
+            this.lastFireTime = 0;
+            this.setupGunModel();
+            this.setupEventListeners();
+        },
+
+        setupGunModel: function() {
+            // Create gun model
+            const gunBody = document.createElement('a-box');
+            const gunBarrel = document.createElement('a-cylinder');
+            
+            // Gun body
+            gunBody.setAttribute('color', '#6A5ACD');
+            gunBody.setAttribute('width', '0.05');
+            gunBody.setAttribute('height', '0.08');
+            gunBody.setAttribute('depth', '0.15');
+            gunBody.setAttribute('position', '0 0 -0.05');
+            
+            // Gun barrel
+            gunBarrel.setAttribute('color', '#6A5ACD');
+            gunBarrel.setAttribute('radius', '0.02');
+            gunBarrel.setAttribute('height', '0.2');
+            gunBarrel.setAttribute('rotation', '90 0 0');
+            gunBarrel.setAttribute('position', '0 0 -0.2');
+            
+            this.el.appendChild(gunBody);
+            this.el.appendChild(gunBarrel);
+        },
+
+        setupEventListeners: function() {
+            // Listen for trigger press
+            this.el.addEventListener('triggerdown', this.onTriggerDown.bind(this));
+            
+            // Listen for game state changes
+            this.el.sceneEl.addEventListener('gameStateChanged', (e) => {
+                if (e.detail.state === 'playing') {
+                    this.canFire = true;
+                } else {
+                    this.canFire = false;
+                }
+            });
+        },
+
+        onTriggerDown: function() {
+            if (!this.canFire) return;
+            
+            const now = Date.now();
+            if (now - this.lastFireTime < this.data.fireRate) return;
+            
+            this.lastFireTime = now;
+            this.fire();
+        },
+
+        fire: function() {
+            // Create projectile
+            const projectile = document.createElement('a-sphere');
+            projectile.setAttribute('color', '#00FFFF');
+            projectile.setAttribute('radius', '0.03');
+            
+            // Get gun position and direction
+            const gunWorldPosition = new THREE.Vector3();
+            const gunWorldDirection = new THREE.Vector3();
+            
+            this.el.object3D.getWorldPosition(gunWorldPosition);
+            this.el.object3D.getWorldDirection(gunWorldDirection);
+            gunWorldDirection.multiplyScalar(-1); // Flip direction
+            
+            // Set projectile position at gun tip
+            const projectilePosition = gunWorldPosition.clone();
+            projectilePosition.add(gunWorldDirection.clone().multiplyScalar(0.3));
+            
+            projectile.setAttribute('position', projectilePosition);
+            
+            // Add to scene
+            this.el.sceneEl.appendChild(projectile);
+            
+            // Add projectile component with direction
+            projectile.setAttribute('projectile', {
+                direction: {
+                    x: gunWorldDirection.x,
+                    y: gunWorldDirection.y,
+                    z: gunWorldDirection.z
+                }
+            });
+            
+            // Add recoil animation
+            this.el.setAttribute('animation__recoil', {
+                property: 'position',
+                dur: 100,
+                easing: 'easeOutQuad',
+                to: '0 0 0.05',
+                from: '0 0 0'
+            });
+            
+            // Reset position after recoil
+            setTimeout(() => {
+                this.el.setAttribute('animation__reset', {
+                    property: 'position',
+                    dur: 100,
+                    easing: 'easeOutQuad',
+                    to: '0 0 0',
+                    from: '0 0 0.05'
+                });
+            }, 100);
+        }
+    });
+    
+    // Projectile Component
+    AFRAME.registerComponent('projectile', {
+        schema: {
+            speed: {type: 'number', default: 10},
+            direction: {type: 'vec3'},
+            lifetime: {type: 'number', default: 2000} // milliseconds
+        },
+
+        init: function() {
+            // Convert direction to Vector3 if it's not already
+            this.direction = new THREE.Vector3(
+                this.data.direction.x,
+                this.data.direction.y,
+                this.data.direction.z
+            );
+            
+            // Set up lifetime
+            setTimeout(() => {
+                if (this.el.parentNode) {
+                    this.el.parentNode.removeChild(this.el);
+                }
+            }, this.data.lifetime);
+            
+            // Create raycaster for more accurate collision detection
+            this.raycaster = new THREE.Raycaster();
+            this.raycasterDirection = this.direction.clone().normalize();
+        },
+
+        tick: function() {
+            // Simple linear movement without physics
+            const position = this.el.object3D.position;
+            const moveAmount = this.data.speed / 60;
+            
+            // Update position
+            position.x += this.direction.x * moveAmount;
+            position.y += this.direction.y * moveAmount;
+            position.z += this.direction.z * moveAmount;
+            
+            // Check for collisions using raycaster
+            this.checkCollisions();
+        },
+
+        checkCollisions: function() {
+            const projectilePosition = new THREE.Vector3();
+            this.el.object3D.getWorldPosition(projectilePosition);
+            
+            // Get all gophers
+            const gophers = Array.from(document.querySelectorAll('[gopher]'));
+            
+            // Check each gopher for collision
+            for (const gopher of gophers) {
+                if (!gopher.components.gopher || !gopher.components.gopher.isAlive) continue;
+                
+                const gopherPosition = new THREE.Vector3();
+                gopher.object3D.getWorldPosition(gopherPosition);
+                
+                // Simple distance-based collision detection
+                const distance = projectilePosition.distanceTo(gopherPosition);
+                
+                // If we're close enough, do a more precise check
+                if (distance < 0.5) {
+                    console.log('Potential hit detected, distance:', distance);
+                    
+                    // Get gopher's world position
+                    const gopherY = gopherPosition.y;
+                    
+                    // Only count hits if the gopher is above ground
+                    if (gopherY > -0.2) {
+                        console.log('Hit confirmed! Gopher Y position:', gopherY);
+                        
+                        // Register hit
+                        gopher.components.gopher.hit();
+                        
+                        // Remove projectile
+                        if (this.el.parentNode) {
+                            this.el.parentNode.removeChild(this.el);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    </script>
+</body>
+</html>
