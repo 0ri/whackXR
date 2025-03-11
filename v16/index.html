@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>WhackXR v16.0</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+        
+        .splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+        }
+
+        .splash-screen h1 {
+            font-size: 3em;
+            margin-bottom: 0.5em;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .splash-screen p {
+            font-size: 1.2em;
+            margin: 0.5em 0;
+            color: #8a8a8a;
+        }
+
+        .version {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: #8a8a8a;
+            font-family: monospace;
+        }
+
+        .error-message {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            font-family: Arial, sans-serif;
+            z-index: 2000;
+        }
+        
+        .error-details {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 5px;
+            max-width: 90%;
+            max-height: 50vh;
+            overflow-y: auto;
+            text-align: left;
+            color: #ffaaaa;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+        
+        .error-message button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: #444;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .requirements {
+            margin-top: 2em;
+            padding: 1em;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .requirements h2 {
+            color: #FFD700;
+            margin-bottom: 0.5em;
+        }
+
+        .requirements ul {
+            list-style: none;
+            padding: 0;
+            text-align: left;
+        }
+
+        .requirements li {
+            margin: 0.5em 0;
+            color: #8a8a8a;
+        }
+
+        .requirements li::before {
+            content: "•";
+            color: #FFD700;
+            margin-right: 0.5em;
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-screen" id="splash-screen">
+        <h1>WhackXR</h1>
+        <p>A WebXR Whack-a-Gopher Game</p>
+        <div class="requirements">
+            <h2>Requirements</h2>
+            <ul>
+                <li>Meta Quest (2, 3, Pro)</li>
+                <li>Oculus Browser 15.0+</li>
+                <li>WebXR support</li>
+                <li>Clear play area (3m × 3m recommended)</li>
+            </ul>
+        </div>
+        <div class="version">v16.0</div>
+    </div>
+
+    <div id="unsupported-message" class="error-message">
+        <h2>WebXR Not Supported</h2>
+        <p>Please use an Oculus Browser 15.0+ on Meta Quest.</p>
+        <p>Make sure you have WebXR enabled.</p>
+    </div>
+    
+    <div id="error-display" class="error-message">
+        <h2>Error Occurred</h2>
+        <p id="error-message">Something went wrong.</p>
+        <div id="error-details" class="error-details"></div>
+        <button id="error-dismiss">Dismiss</button>
+    </div>
+
+    <script>
+    // Global error handler
+    window.addEventListener('error', function(event) {
+        if (Debug && typeof Debug.error === 'function') {
+            Debug.error('global', 'uncaught-error', event.error || event.message);
+        } else {
+            // Show error in UI if Debug isn't available yet
+            const errorDisplay = document.getElementById('error-display');
+            const errorMessage = document.getElementById('error-message');
+            const errorDetails = document.getElementById('error-details');
+            
+            if (errorDisplay && errorMessage && errorDetails) {
+                errorMessage.textContent = 'Uncaught Error';
+                errorDetails.textContent = event.error ? event.error.stack : event.message;
+                errorDisplay.style.display = 'flex';
+                
+                // Setup dismiss button
+                const dismissButton = document.getElementById('error-dismiss');
+                if (dismissButton) {
+                    dismissButton.onclick = () => {
+                        errorDisplay.style.display = 'none';
+                    };
+                }
+            }
+        }
+        
+        console.error('Uncaught error:', event.error || event.message);
+        event.preventDefault();
+        return false;
+    });
+    
+    // Promise rejection handler
+    window.addEventListener('unhandledrejection', function(event) {
+        if (Debug && typeof Debug.error === 'function') {
+            Debug.error('global', 'unhandled-rejection', event.reason);
+        } else {
+            console.error('Unhandled rejection:', event.reason);
+        }
+        event.preventDefault();
+        return false;
+    });
+    </script>
+    
+    <a-scene 
+        webxr="requiredFeatures: local-floor, hit-test;"
+        renderer="antialias: true; precision: medium;"
+        loading-screen="dotsColor: white; backgroundColor: #1a1a2e"
+        game-manager>
+        
+        <a-assets>
+            <!-- Audio assets -->
+            <audio id="sound-hit" src="https://cdn.aframe.io/basic-guide/audio/hit.ogg" preload="auto"></audio>
+            <audio id="sound-shoot" src="https://cdn.aframe.io/basic-guide/audio/shoot.ogg" preload="auto"></audio>
+            <audio id="sound-emerge" src="https://cdn.aframe.io/basic-guide/audio/pop.ogg" preload="auto"></audio>
+            <audio id="sound-retreat" src="https://cdn.aframe.io/basic-guide/audio/click.ogg" preload="auto"></audio>
+            <audio id="sound-start" src="https://cdn.aframe.io/basic-guide/audio/321.ogg" preload="auto"></audio>
+            <audio id="sound-end" src="https://cdn.aframe.io/basic-guide/audio/gameover.ogg" preload="auto"></audio>
+            <audio id="music-background" src="https://cdn.aframe.io/basic-guide/audio/backgroundnoise.ogg" preload="auto" loop></audio>
+        </a-assets>
+        
+        <!-- Camera and controllers -->
+        <a-entity id="camera-rig">
+            <a-entity id="camera" camera position="0 1.6 0" look-controls="pointerLockEnabled: false">
+                <a-entity id="ui-container" position="0 0 0"></a-entity>
+            </a-entity>
+        </a-entity>
+        
+        <!-- Floor and gopher container -->
+        <a-entity id="floor-container" position="0 0 0"></a-entity>
+        <a-entity id="gopher-container" position="0 0 0"></a-entity>
+    </a-scene>
+
+    <script src="js/debug.js"></script>
+    <script src="js/gopher.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
