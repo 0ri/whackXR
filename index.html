@@ -1,568 +1,1830 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR Gopher Shooter</title>
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <title>WebXR Whack-a-Mole</title>
     <style>
-        #startARButton {
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #container {
             position: absolute;
-            top: 50%;
+            width: 100%;
+            height: 100%;
+        }
+
+        #startAR {
+            position: absolute;
             left: 50%;
+            top: 50%;
             transform: translate(-50%, -50%);
-            padding: 20px;
-            font-size: 24px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
             background-color: #4CAF50;
             color: white;
-            border: none;
+            font-size: 16px;
             cursor: pointer;
-            z-index: 1000;
         }
-        #startARButton:hover {
-            background-color: #45a049;
+
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            text-shadow: 0 0 5px black;
+            pointer-events: none;
+        }
+
+        .hidden {
+            display: none;
         }
     </style>
-</head>
-<body>
-    <!-- Button to initiate AR session -->
-    <button id="startARButton">Start AR</button>
+    <script type="module">
+        // Import Three.js from CDN
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
 
-    <!-- A-Frame Scene -->
-    <a-scene embedded arjs="sourceType: webcam;" vr-mode-ui="enabled: false">
-        <!-- Camera with UI elements -->
-        <a-entity id="camera" camera position="0 1.6 0" wasd-controls look-controls>
-            <a-entity id="startUI" position="0 0 -1" text="value: Point your controller at the floor and pull the trigger to start.\nShoot gophers to score points!; width: 1; align: center; color: white;" visible="true"></a-entity>
-            <a-entity id="gameOverUI" position="0 0 -1" text="value: Game Over!\nFinal Score: 0\nPull trigger to restart; width: 1; align: center; color: white;" visible="false"></a-entity>
-        </a-entity>
+        // Game state variables
+        let scene, camera, renderer;
+        let gameContainer;
+        let scoreDisplay, timerDisplay;
+        let arSession = null;
+        let controller, controllerGrip;
+        let raycaster, tempMatrix;
+        let floorGroup, moleGroup, scoreSign, particlesGroup;
+        let levelCompleteUI;
 
-        <!-- Controllers with gun component -->
-        <a-entity id="leftHand" hand-controls="hand: left" gun></a-entity>
-        <a-entity id="rightHand" hand-controls="hand: right" gun></a-entity>
-
-        <!-- Game area, initially hidden until floor is marked -->
-        <a-entity id="gameArea" visible="false">
-            <a-plane id="floor" rotation="-90 0 0" width="3" height="3" color="#a3815f" opacity="0.5"></a-plane>
-            <a-entity id="scoreboard" position="0 0.1 -1" look-at="[camera]">
-                <a-plane width="1" height="0.5" color="#222" opacity="0.8">
-                    <a-text id="scoreText" position="-0.45 0.15 0.01" value="Score: 0" color="white"></a-text>
-                    <a-text id="timeText" position="-0.45 -0.05 0.01" value="Time: 60" color="white"></a-text>
-                    <a-text id="powerupText" position="-0.45 -0.25 0.01" value="" color="white"></a-text>
-                </a-plane>
-            </a-entity>
-        </a-entity>
-
-        <!-- Object pools for performance optimization -->
-        <a-entity id="gopherPool"></a-entity>
-        <a-entity id="projectilePool"></a-entity>
-        <a-entity id="explosionPool"></a-entity>
-        <a-entity id="powerupPool"></a-entity>
-    </a-scene>
-
-    <!-- Game Logic -->
-    <script>
-        // Game state
-        const gameState = {
-            isPlaying: false,
-            score: 0,
-            timeRemaining: 60,
-            floorMarked: false,
-            scoreMultiplier: 1,
-            slowGophers: false,
-            powerupTimeRemaining: 0,
-            powerupType: null,
-            activeGophers: [],
-            activeProjectiles: [],
-            explosions: [],
-            powerups: []
-        };
-
-        // Configuration
-        const config = {
-            gopherSpawnInterval: [1000, 3000], // ms
-            gopherLifetime: 2000, // ms
-            maxGophers: 10,
-            maxProjectiles: 10,
-            projectileSpeed: 10, // m/s
-            projectileLifetime: 2000, // ms
-            powerupChance: 0.2,
-            powerupSpawnInterval: [10000, 15000], // ms
-            powerupDuration: 10000, // ms
-            gameTime: 60000, // ms
-            gopherSpawnArea: 3, // meters
-            gopherHitRadius: 0.25,
-            powerupHitRadius: 0.3,
-            gopherTypes: {
-                basic: { color: 'brown', points: 10, speed: 1, chance: 0.7 },
-                fast: { color: 'green', points: 20, speed: 1.5, chance: 0.2 },
-                rare: { color: 'gold', points: 50, speed: 1, chance: 0.1 }
+        // Creature types with their properties
+        const creatureTypes = [
+            {
+                type: 'mole',
+                color: 0xA06630, // Lighter brown color for better contrast with dirt
+                pointValue: 1,
+                minLevel: 1,
+                probability: 1.0
             },
-            powerupTypes: {
-                doubleScore: { color: 'red', effect: 'doubleScore' },
-                slowGophers: { color: 'blue', effect: 'slowGophers' }
+            {
+                type: 'redGopher',
+                color: 0xCC0000,
+                pointValue: 2,
+                minLevel: 2,
+                probability: 0.6
+            },
+            {
+                type: 'blueRabbit',
+                color: 0x0066CC,
+                pointValue: 3,
+                minLevel: 3,
+                probability: 0.4
+            },
+            {
+                type: 'goldenMole',
+                color: 0xFFD700,
+                pointValue: 5,
+                minLevel: 4,
+                probability: 0.2
             }
-        };
+        ];
 
-        // Object pools
-        const pools = {
-            gophers: [],
-            projectiles: [],
-            explosions: [],
-            powerups: []
-        };
+        // Possible hole positions
+        const holePositions = [
+            { x: -0.8, z: -0.8 },
+            { x: 0, z: -0.5 },
+            { x: 0.8, z: -0.8 },
+            { x: -1, z: 0 },
+            { x: 0, z: 0 },
+            { x: 1, z: 0 },
+            { x: -0.8, z: 0.8 },
+            { x: 0, z: 0.5 },
+            { x: 0.8, z: 0.8 }
+        ];
 
-        // Audio setup
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        function generateTone(frequency, duration, type = 'sine') {
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            oscillator.type = type;
-            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + duration);
+        // Game settings
+        let score = 0;
+        let level = 1;
+        let levelScore = 0; // Score for current level only
+        let moleSpeed = 2000; // Base time in ms for a mole to stay up
+        let molesPerLevel = 3;
+        let activeMoles = [];
+        let activeHoles = [];
+        let gameActive = false;
+        let gamePaused = false;
+
+        // Level system
+        const levelGoals = [10, 20, 30, 50]; // Points needed to complete each level
+
+        // Timer variables
+        let gameTimer = 0;
+        let levelStartTime = 0;
+        let lastTimestamp = 0;
+
+        // Audio elements
+        let hitSound;
+
+        // Initialize the game
+        function init() {
+            gameContainer = document.getElementById('container');
+            scoreDisplay = document.getElementById('info');
+
+            // Create timer display
+            timerDisplay = document.createElement('div');
+            timerDisplay.id = 'timer';
+            timerDisplay.style.position = 'absolute';
+            timerDisplay.style.top = '40px';
+            timerDisplay.style.width = '100%';
+            timerDisplay.style.textAlign = 'center';
+            timerDisplay.style.color = 'white';
+            timerDisplay.style.fontFamily = 'Arial, sans-serif';
+            timerDisplay.style.fontSize = '18px';
+            timerDisplay.style.textShadow = '0 0 5px black';
+            timerDisplay.style.pointerEvents = 'none';
+            document.body.appendChild(timerDisplay);
+
+            // Create scene
+            scene = new THREE.Scene();
+
+            // Create camera
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            gameContainer.appendChild(renderer.domElement);
+
+            // Check XR support
+            checkXRSupport();
+
+            // Create raycaster for controller interactions
+            raycaster = new THREE.Raycaster();
+            tempMatrix = new THREE.Matrix4();
+
+            // Create object groups
+            floorGroup = new THREE.Group();
+            moleGroup = new THREE.Group();
+            particlesGroup = new THREE.Group();
+            scene.add(floorGroup);
+            scene.add(moleGroup);
+            scene.add(particlesGroup);
+
+            // Create hit sound
+            createHitSound();
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize, false);
         }
-        const sounds = {
-            shoot: () => generateTone(500, 0.1, 'square'),
-            hit: () => generateTone(300, 0.2, 'sine'),
-            powerup: () => {
-                const osc = audioContext.createOscillator();
-                const gain = audioContext.createGain();
-                osc.connect(gain);
-                gain.connect(audioContext.destination);
-                osc.frequency.setValueAtTime(300, audioContext.currentTime);
-                osc.frequency.linearRampToValueAtTime(600, audioContext.currentTime + 0.5);
-                gain.gain.setValueAtTime(0.3, audioContext.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-                osc.start();
-                osc.stop(audioContext.currentTime + 0.5);
-            },
-            floorMarked: () => generateTone(440, 0.3, 'sine')
-        };
 
-        // Gun component
-        AFRAME.registerComponent('gun', {
-            init: function() {
-                const handle = document.createElement('a-box');
-                handle.setAttribute('width', '0.1');
-                handle.setAttribute('height', '0.1');
-                handle.setAttribute('depth', '0.05');
-                handle.setAttribute('color', '#444');
-                const barrel = document.createElement('a-cylinder');
-                barrel.setAttribute('position', '0 0 -0.15');
-                barrel.setAttribute('rotation', '90 0 0');
-                barrel.setAttribute('height', '0.2');
-                barrel.setAttribute('radius', '0.02');
-                barrel.setAttribute('color', '#333');
-                this.el.appendChild(handle);
-                this.el.appendChild(barrel);
-
-                this.el.addEventListener('triggerdown', () => {
-                    if (!gameState.floorMarked) {
-                        this.markFloor();
-                    } else if (gameState.isPlaying) {
-                        this.shoot();
-                    } else {
-                        this.restartGame();
-                    }
-                });
-            },
-            markFloor: function() {
-                const controller = this.el.object3D;
-                const position = new THREE.Vector3();
-                controller.getWorldPosition(position);
-                const gameArea = document.querySelector('#gameArea');
-                gameArea.setAttribute('position', `${position.x} 0 ${position.z}`);
-                gameArea.setAttribute('visible', true);
-                const floorPlane = document.querySelector('#floor');
-                floorPlane.setAttribute('color', '#ffffff');
-                setTimeout(() => floorPlane.setAttribute('color', '#a3815f'), 300);
-                sounds.floorMarked();
-                document.querySelector('#startUI').setAttribute('visible', false);
-                gameState.floorMarked = true;
-                startGame();
-            },
-            shoot: function() {
-                if (gameState.activeProjectiles.length >= config.maxProjectiles) return;
-                sounds.shoot();
-                let projectile;
-                if (pools.projectiles.length > 0) {
-                    projectile = pools.projectiles.pop();
-                    projectile.setAttribute('visible', true);
-                } else {
-                    projectile = document.createElement('a-sphere');
-                    projectile.setAttribute('radius', '0.02');
-                    projectile.setAttribute('color', 'white');
-                    projectile.setAttribute('material', 'emissive: white; emissiveIntensity: 0.5');
-                    document.querySelector('#projectilePool').appendChild(projectile);
-                }
-                const gunWorldPosition = new THREE.Vector3();
-                const gunWorldRotation = new THREE.Quaternion();
-                this.el.object3D.getWorldPosition(gunWorldPosition);
-                this.el.object3D.getWorldQuaternion(gunWorldRotation);
-                const offset = new THREE.Vector3(0, 0, -0.1).applyQuaternion(gunWorldRotation);
-                const spawnPosition = gunWorldPosition.add(offset);
-                projectile.setAttribute('position', spawnPosition);
-                const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(gunWorldRotation).normalize();
-                gameState.activeProjectiles.push({
-                    element: projectile,
-                    velocity: direction.multiplyScalar(config.projectileSpeed),
-                    createdAt: Date.now()
-                });
-            },
-            restartGame: function() {
-                resetGameState();
-                returnAllToPool();
-                document.querySelector('#gameOverUI').setAttribute('visible', false);
-                startGame();
+        // Check if WebXR AR is supported
+        function checkXRSupport() {
+            if ('xr' in navigator) {
+                navigator.xr.isSessionSupported('immersive-ar')
+                    .then((supported) => {
+                        if (supported) {
+                            document.getElementById('startAR').classList.remove('hidden');
+                            document.getElementById('startAR').addEventListener('click', startAR);
+                        } else {
+                            showWebXRNotSupportedMessage('AR not supported by your device');
+                        }
+                    })
+                    .catch(err => {
+                        showWebXRNotSupportedMessage('Error checking AR support: ' + err);
+                    });
+            } else {
+                showWebXRNotSupportedMessage('WebXR not supported by your browser');
             }
-        });
+        }
 
-        // Game functions
-        function startGame() {
-            gameState.isPlaying = true;
-            resetGameState(false);
-            updateScoreboard();
-            gameLoop();
-            scheduleNextGopherSpawn();
-            scheduleNextPowerupSpawn();
+        // Show message when WebXR is not supported
+        function showWebXRNotSupportedMessage(message) {
+            const warning = document.createElement('div');
+            warning.style.position = 'absolute';
+            warning.style.left = '50%';
+            warning.style.top = '50%';
+            warning.style.transform = 'translate(-50%, -50%)';
+            warning.style.textAlign = 'center';
+            warning.style.backgroundColor = 'rgba(0,0,0,0.7)';
+            warning.style.color = 'white';
+            warning.style.padding = '20px';
+            warning.style.borderRadius = '5px';
+            warning.innerHTML = message + '<br><br>Try on a WebXR-compatible device/browser.<br>For desktop: Use fallback mode below<br><button id="fallbackMode">Test in Fallback Mode</button>';
+            document.body.appendChild(warning);
+
+            document.getElementById('fallbackMode').addEventListener('click', startFallbackMode);
+        }
+
+        // Start AR session
+        function startAR() {
+            // Initialize audio context on user interaction
+            initAudioContext();
+
+            navigator.xr.requestSession('immersive-ar', {
+                requiredFeatures: ['hit-test', 'local-floor']
+            }).then(onSessionStarted).catch(err => {
+                console.error('Error starting AR session:', err);
+                showWebXRNotSupportedMessage('Error starting AR: ' + err.message);
+            });
+        }
+
+        // Start fallback mode for desktop testing
+        function startFallbackMode() {
+            // Initialize audio context on user interaction
+            initAudioContext();
+
+            // Hide AR-specific elements
+            document.getElementById('startAR').classList.add('hidden');
+
+            // Remove the warning modal from the DOM
+            const warningElements = document.querySelectorAll('div[style*="position: absolute"][style*="left: 50%"][style*="top: 50%"]');
+            warningElements.forEach(element => {
+                if (element.innerHTML.includes('fallbackMode')) {
+                    document.body.removeChild(element);
+                }
+            });
+
+            // Setup scene for non-AR viewing
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(0, 10, 5);
+            scene.add(directionalLight);
+
+            // Position camera for desktop viewing
+            camera.position.set(0, 1.6, 3);
+            camera.lookAt(0, 0, 0);
+
+            // Create a floor and mole holes for desktop view
+            createFloor();
+            createScoreSign();
+
+            // Add mouse click interaction
+            window.addEventListener('click', onMouseClick);
+
+            // Start animation loop
+            renderer.setAnimationLoop(render);
+
+            // Start game
+            startGame();
+        }
+
+        // Handle AR session start
+        function onSessionStarted(session) {
+            arSession = session;
+            renderer.xr.setReferenceSpaceType('local-floor');
+            renderer.xr.setSession(session);
+
+            // Setup controller for AR
+            controller = renderer.xr.getController(0);
+            controller.addEventListener('select', onSelect);
+            scene.add(controller);
+
+            // Create controller grip
+            controllerGrip = renderer.xr.getControllerGrip(0);
+            scene.add(controllerGrip);
+
+            // Handle session end
+            session.addEventListener('end', onSessionEnd);
+
+            // Create scene content
+            createFloor();
+            createScoreSign();
+
+            // Start game
+            startGame();
+
+            // Hide UI elements in AR mode
+            document.getElementById('startAR').classList.add('hidden');
+        }
+
+        // Handle AR session end
+        function onSessionEnd() {
+            arSession = null;
+            gameActive = false;
+
+            // Session ended - no background music to stop
+        }
+
+        // Create floor with dirt texture
+        function createFloor() {
+            // Create a simple brown floor to represent dirt
+            const floorGeometry = new THREE.PlaneGeometry(5, 5);
+            const floorMaterial = new THREE.MeshBasicMaterial({
+                color: 0x6B3D14, // Darker brown for dirt
+                side: THREE.DoubleSide
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = 0;
+            floorGroup.add(floor);
+
+            // No pre-created holes - they will be created dynamically
+        }
+
+        // Create score display sign
+        function createScoreSign() {
+            const signGroup = new THREE.Group();
+
+            // Create sign post
+            const postGeometry = new THREE.BoxGeometry(0.05, 0.5, 0.05);
+            const postMaterial = new THREE.MeshBasicMaterial({ color: 0x6D4C41 });
+            const post = new THREE.Mesh(postGeometry, postMaterial);
+            post.position.y = 0.25;
+            signGroup.add(post);
+
+            // Create sign board
+            const boardGeometry = new THREE.BoxGeometry(0.4, 0.2, 0.03);
+            const boardMaterial = new THREE.MeshBasicMaterial({ color: 0xA1887F });
+            const board = new THREE.Mesh(boardGeometry, boardMaterial);
+            board.position.y = 0.6;
+            signGroup.add(board);
+
+            // Add score text (using geometry for AR compatibility)
+            updateScoreSign(signGroup, 0);
+
+            // Position sign in corner of play area
+            signGroup.position.set(1.2, 0, -1.2);
+            signGroup.rotation.y = -Math.PI / 4;
+
+            scoreSign = signGroup;
+            scene.add(scoreSign);
+        }
+
+        // Update score on the sign
+        function updateScoreSign(signGroup, score) {
+            // Remove old score display if it exists
+            signGroup.children.forEach(child => {
+                if (child.userData && child.userData.isScoreText) {
+                    signGroup.remove(child);
+                }
+            });
+
+            // Update score text in UI
+            scoreDisplay.textContent = `Score: ${score} | Level: ${level}`;
+        }
+
+        // Create a creature at a specific position
+        function createMole(position, holeRef) {
+            // Only allow creatures that are unlocked for the current level
+            // Level 1: Only moles
+            // Level 2: Moles and red gophers
+            // Level 3: Moles, red gophers, and blue rabbits
+            // Level 4+: All creatures
+            let availableCreatures = creatureTypes.filter(c => c.minLevel <= level);
+
+            // Calculate total probability
+            const totalProbability = availableCreatures.reduce((sum, c) => sum + c.probability, 0);
+
+            // Randomly select creature type based on probability
+            let randomValue = Math.random() * totalProbability;
+            let selectedCreature = availableCreatures[0]; // Default to first type
+
+            for (const creature of availableCreatures) {
+                if (randomValue <= creature.probability) {
+                    selectedCreature = creature;
+                    break;
+                }
+                randomValue -= creature.probability;
+            }
+
+            // Create creature with enhanced detailed models
+            const creatureGroup = new THREE.Group();
+
+            // Enhanced materials with better lighting and textures
+            const creatureMaterial = new THREE.MeshLambertMaterial({
+                color: selectedCreature.color,
+                flatShading: true // For stylized look
+            });
+
+            // Enhanced material variations
+            const eyeMaterial = new THREE.MeshLambertMaterial({ color: 0x000000 });
+            const whiteMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+            const pinkMaterial = new THREE.MeshLambertMaterial({ color: 0xFF69B4 });
+            const darkMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+            const furMaterial = new THREE.MeshLambertMaterial({
+                color: selectedCreature.color,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            // Enhanced body with more realistic proportions using available geometries
+            let bodyGeometry, neckGeometry, chestGeometry;
+            if (selectedCreature.type === 'goldenMole') {
+                // Golden mole - more regal proportions with layered body
+                bodyGeometry = new THREE.SphereGeometry(0.12, 12, 8);
+                chestGeometry = new THREE.SphereGeometry(0.1, 12, 8);
+                neckGeometry = new THREE.CylinderGeometry(0.08, 0.1, 0.06, 12);
+            } else {
+                // Standard body with organic curves
+                bodyGeometry = new THREE.SphereGeometry(0.1, 10, 8);
+                chestGeometry = new THREE.SphereGeometry(0.08, 10, 8);
+                neckGeometry = new THREE.CylinderGeometry(0.07, 0.09, 0.05, 10);
+            }
+
+            // Main body (lower torso)
+            const body = new THREE.Mesh(bodyGeometry, creatureMaterial);
+            body.position.y = 0.06;
+            body.scale.set(1, 0.8, 1.2); // Make more oval-shaped
+            creatureGroup.add(body);
+
+            // Chest (upper torso)
+            const chest = new THREE.Mesh(chestGeometry, creatureMaterial);
+            chest.position.y = 0.12;
+            chest.scale.set(1, 0.9, 1.1);
+            creatureGroup.add(chest);
+
+            // Add neck for more realistic anatomy
+            const neck = new THREE.Mesh(neckGeometry, creatureMaterial);
+            neck.position.y = 0.16;
+            creatureGroup.add(neck);
+
+            // Enhanced head with better proportions
+            const headGeometry = new THREE.SphereGeometry(0.09, 16, 12);
+            const head = new THREE.Mesh(headGeometry, creatureMaterial);
+            head.position.y = 0.21;
+            head.scale.set(1, 0.9, 1.1); // Slightly flatten and elongate
+            creatureGroup.add(head);
+
+            // Add fur texture details with smaller spheres
+            for (let i = 0; i < 8; i++) {
+                const furPatch = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.015, 6, 4),
+                    furMaterial
+                );
+                const angle = (i / 8) * Math.PI * 2;
+                furPatch.position.set(
+                    Math.cos(angle) * 0.08,
+                    0.06 + Math.random() * 0.08,
+                    Math.sin(angle) * 0.08
+                );
+                creatureGroup.add(furPatch);
+            }
+
+            // Add paws/feet for more realism
+            const pawGeometry = new THREE.SphereGeometry(0.025, 8, 6);
+            const pawMaterial = new THREE.MeshLambertMaterial({
+                color: selectedCreature.color * 0.8 // Slightly darker than body
+            });
+
+            // Front paws
+            const leftFrontPaw = new THREE.Mesh(pawGeometry, pawMaterial);
+            leftFrontPaw.position.set(0.06, 0.02, 0.08);
+            leftFrontPaw.scale.set(1, 0.6, 1.2);
+            creatureGroup.add(leftFrontPaw);
+
+            const rightFrontPaw = new THREE.Mesh(pawGeometry, pawMaterial);
+            rightFrontPaw.position.set(-0.06, 0.02, 0.08);
+            rightFrontPaw.scale.set(1, 0.6, 1.2);
+            creatureGroup.add(rightFrontPaw);
+
+            // Back paws
+            const leftBackPaw = new THREE.Mesh(pawGeometry, pawMaterial);
+            leftBackPaw.position.set(0.05, 0.02, -0.05);
+            leftBackPaw.scale.set(1, 0.6, 1);
+            creatureGroup.add(leftBackPaw);
+
+            const rightBackPaw = new THREE.Mesh(pawGeometry, pawMaterial);
+            rightBackPaw.position.set(-0.05, 0.02, -0.05);
+            rightBackPaw.scale.set(1, 0.6, 1);
+            creatureGroup.add(rightBackPaw);
+
+            // Add subtle tail
+            const tailGeometry = new THREE.ConeGeometry(0.02, 0.08, 6);
+            const tail = new THREE.Mesh(tailGeometry, creatureMaterial);
+            tail.position.set(0, 0.08, -0.12);
+            tail.rotation.x = Math.PI / 3; // Angle it upward
+            creatureGroup.add(tail);
+
+            // Common feature: Eyes - slightly oval for more character
+            const leftEyeGeometry = new THREE.SphereGeometry(0.018, 6, 6);
+            leftEyeGeometry.scale(1, 1.2, 1); // Make slightly oval
+            const leftEye = new THREE.Mesh(leftEyeGeometry, eyeMaterial);
+            leftEye.position.set(0.045, 0.2, 0.08);
+            creatureGroup.add(leftEye);
+
+            const rightEyeGeometry = new THREE.SphereGeometry(0.018, 6, 6);
+            rightEyeGeometry.scale(1, 1.2, 1); // Make slightly oval
+            const rightEye = new THREE.Mesh(rightEyeGeometry, eyeMaterial);
+            rightEye.position.set(-0.045, 0.2, 0.08);
+            creatureGroup.add(rightEye);
+
+            // Eye reflections for more life-like appearance
+            const leftReflection = new THREE.Mesh(
+                new THREE.SphereGeometry(0.005, 4, 4),
+                whiteMaterial
+            );
+            leftReflection.position.set(0.04, 0.205, 0.095);
+            creatureGroup.add(leftReflection);
+
+            const rightReflection = new THREE.Mesh(
+                new THREE.SphereGeometry(0.005, 4, 4),
+                whiteMaterial
+            );
+            rightReflection.position.set(-0.04, 0.205, 0.095);
+            creatureGroup.add(rightReflection);
+
+            // Nose - different shapes per creature type
+            let noseGeometry;
+            let noseColor = 0xFF69B4; // Default pink nose
+
+            // Customize features based on creature type with more detailed polygonal style
+            if (selectedCreature.type === 'mole') {
+                // Brown mole features
+                // Add detailed snout
+                const snoutGeometry = new THREE.CylinderGeometry(0.05, 0.07, 0.06, 6);
+                const snout = new THREE.Mesh(snoutGeometry, creatureMaterial);
+                snout.position.set(0, 0.16, 0.08);
+                snout.rotation.x = Math.PI / 2.5;
+                creatureGroup.add(snout);
+
+                // Add small ears
+                const earGeometry = new THREE.ConeGeometry(0.03, 0.04, 5);
+                earGeometry.rotateX(Math.PI / 6);
+
+                const leftEar = new THREE.Mesh(earGeometry, creatureMaterial);
+                leftEar.position.set(0.07, 0.23, -0.02);
+                leftEar.rotation.z = -Math.PI / 12;
+                creatureGroup.add(leftEar);
+
+                const rightEar = new THREE.Mesh(earGeometry, creatureMaterial);
+                rightEar.position.set(-0.07, 0.23, -0.02);
+                rightEar.rotation.z = Math.PI / 12;
+                creatureGroup.add(rightEar);
+
+                // Add cheeks
+                const cheekGeometry = new THREE.SphereGeometry(0.04, 5, 5);
+                cheekGeometry.scale(1, 0.7, 0.7);
+
+                const leftCheek = new THREE.Mesh(cheekGeometry, creatureMaterial);
+                leftCheek.position.set(0.08, 0.14, 0.04);
+                creatureGroup.add(leftCheek);
+
+                const rightCheek = new THREE.Mesh(cheekGeometry, creatureMaterial);
+                rightCheek.position.set(-0.08, 0.14, 0.04);
+                creatureGroup.add(rightCheek);
+
+                // Pink nose
+                noseColor = 0xFF69B4;
+                noseGeometry = new THREE.OctahedronGeometry(0.02, 1);
+            }
+            else if (selectedCreature.type === 'redGopher') {
+                // Red gopher features
+                // Add pointed ears
+                const earGeometry = new THREE.ConeGeometry(0.04, 0.1, 5);
+
+                const leftEar = new THREE.Mesh(earGeometry, creatureMaterial);
+                leftEar.position.set(0.08, 0.26, 0);
+                leftEar.rotation.z = -Math.PI / 6;
+                creatureGroup.add(leftEar);
+
+                const rightEar = new THREE.Mesh(earGeometry, creatureMaterial);
+                rightEar.position.set(-0.08, 0.26, 0);
+                rightEar.rotation.z = Math.PI / 6;
+                creatureGroup.add(rightEar);
+
+                // Add a gopher-style snout
+                const snoutGeometry = new THREE.CylinderGeometry(0.045, 0.06, 0.08, 6);
+                const snout = new THREE.Mesh(snoutGeometry, creatureMaterial);
+                snout.position.set(0, 0.16, 0.09);
+                snout.rotation.x = Math.PI / 2.5;
+                creatureGroup.add(snout);
+
+                // Add teeth
+                const toothGeometry = new THREE.BoxGeometry(0.015, 0.025, 0.01);
+                const toothMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+
+                const leftTooth = new THREE.Mesh(toothGeometry, toothMaterial);
+                leftTooth.position.set(0.015, 0.13, 0.14);
+                creatureGroup.add(leftTooth);
+
+                const rightTooth = new THREE.Mesh(toothGeometry, toothMaterial);
+                rightTooth.position.set(-0.015, 0.13, 0.14);
+                creatureGroup.add(rightTooth);
+
+                noseColor = 0x000000; // Black nose for gopher
+                noseGeometry = new THREE.OctahedronGeometry(0.022, 1);
+            }
+            else if (selectedCreature.type === 'blueRabbit') {
+                // Blue rabbit features
+                // Add long ears with better shape
+                const earGeometry = new THREE.CylinderGeometry(0.02, 0.03, 0.18, 5);
+                earGeometry.translate(0, 0.09, 0); // Shift origin to bottom
+
+                const leftEar = new THREE.Mesh(earGeometry, creatureMaterial);
+                leftEar.position.set(0.05, 0.22, -0.03);
+                leftEar.rotation.z = -Math.PI / 12;
+                leftEar.rotation.x = -Math.PI / 12;
+                creatureGroup.add(leftEar);
+
+                const rightEar = new THREE.Mesh(earGeometry, creatureMaterial);
+                rightEar.position.set(-0.05, 0.22, -0.03);
+                rightEar.rotation.z = Math.PI / 12;
+                rightEar.rotation.x = -Math.PI / 12;
+                creatureGroup.add(rightEar);
+
+                // Add ear inner part - pink insides
+                const earInnerGeometry = new THREE.CylinderGeometry(0.01, 0.02, 0.14, 5);
+                earInnerGeometry.translate(0, 0.07, 0);
+                const earInnerMaterial = new THREE.MeshBasicMaterial({ color: 0xFF9999 });
+
+                const leftEarInner = new THREE.Mesh(earInnerGeometry, earInnerMaterial);
+                leftEarInner.position.set(0.05, 0.22, -0.025);
+                leftEarInner.rotation.z = -Math.PI / 12;
+                leftEarInner.rotation.x = -Math.PI / 12;
+                creatureGroup.add(leftEarInner);
+
+                const rightEarInner = new THREE.Mesh(earInnerGeometry, earInnerMaterial);
+                rightEarInner.position.set(-0.05, 0.22, -0.025);
+                rightEarInner.rotation.z = Math.PI / 12;
+                rightEarInner.rotation.x = -Math.PI / 12;
+                creatureGroup.add(rightEarInner);
+
+                // Add whiskers
+                const whiskerGeometry = new THREE.CylinderGeometry(0.003, 0.003, 0.08, 3);
+                const whiskerMaterial = new THREE.MeshBasicMaterial({ color: 0xDDDDDD });
+
+                for (let i = 0; i < 3; i++) {
+                    const leftWhisker = new THREE.Mesh(whiskerGeometry, whiskerMaterial);
+                    leftWhisker.position.set(0.06, 0.17 - i * 0.01, 0.1);
+                    leftWhisker.rotation.z = -Math.PI / 2.5;
+                    leftWhisker.rotation.y = -Math.PI / 12;
+                    creatureGroup.add(leftWhisker);
+
+                    const rightWhisker = new THREE.Mesh(whiskerGeometry, whiskerMaterial);
+                    rightWhisker.position.set(-0.06, 0.17 - i * 0.01, 0.1);
+                    rightWhisker.rotation.z = Math.PI / 2.5;
+                    rightWhisker.rotation.y = Math.PI / 12;
+                    creatureGroup.add(rightWhisker);
+                }
+
+                noseColor = 0xFFFFFF; // White nose for rabbit
+                noseGeometry = new THREE.TetrahedronGeometry(0.02, 1);
+            }
+            else if (selectedCreature.type === 'goldenMole') {
+                // Golden mole features - royal and majestic
+                // Add a more detailed crown
+                const crownBaseGeometry = new THREE.CylinderGeometry(0.06, 0.08, 0.03, 6);
+                const crownBase = new THREE.Mesh(crownBaseGeometry, new THREE.MeshBasicMaterial({ color: 0xFFD700 }));
+                crownBase.position.set(0, 0.26, 0);
+                creatureGroup.add(crownBase);
+
+                // Crown points
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i / 5) * Math.PI * 2;
+                    const crownPoint = new THREE.Mesh(
+                        new THREE.ConeGeometry(0.02, 0.05, 4),
+                        new THREE.MeshBasicMaterial({ color: 0xFFD700 })
+                    );
+                    crownPoint.position.set(
+                        Math.sin(angle) * 0.05,
+                        0.3,
+                        Math.cos(angle) * 0.05
+                    );
+                    creatureGroup.add(crownPoint);
+                }
+
+                // Add jewel to crown
+                const jewelGeometry = new THREE.OctahedronGeometry(0.025, 1);
+                const jewelMaterial = new THREE.MeshBasicMaterial({ color: 0xFF0000 }); // Red jewel
+                const jewel = new THREE.Mesh(jewelGeometry, jewelMaterial);
+                jewel.position.set(0, 0.3, 0.05);
+                creatureGroup.add(jewel);
+
+                // Add sparkle effects around the mole
+                const sparklePositions = [
+                    { x: 0.07, y: 0.18, z: 0.05 },
+                    { x: -0.07, y: 0.22, z: 0.05 },
+                    { x: 0.05, y: 0.15, z: 0.09 },
+                    { x: -0.03, y: 0.19, z: -0.05 }
+                ];
+
+                sparklePositions.forEach((pos, i) => {
+                    // Use star-like geometry for sparkles
+                    const sparkle = new THREE.Mesh(
+                        new THREE.OctahedronGeometry(0.015, 0),
+                        new THREE.MeshBasicMaterial({ color: 0xFFFFFF })
+                    );
+                    sparkle.position.set(pos.x, pos.y, pos.z);
+                    sparkle.rotation.set(
+                        Math.random() * Math.PI,
+                        Math.random() * Math.PI,
+                        Math.random() * Math.PI
+                    );
+                    creatureGroup.add(sparkle);
+                });
+
+                // Add royal collar
+                const collarGeometry = new THREE.TorusGeometry(0.08, 0.015, 8, 12, Math.PI);
+                const collarMaterial = new THREE.MeshBasicMaterial({ color: 0x9932CC });
+                const collar = new THREE.Mesh(collarGeometry, collarMaterial);
+                collar.rotation.x = Math.PI / 2;
+                collar.position.set(0, 0.11, 0.01);
+                creatureGroup.add(collar);
+
+                noseColor = 0x000000; // Black nose for golden mole
+                noseGeometry = new THREE.OctahedronGeometry(0.02, 1);
+            }
+
+            // Create nose with appropriate geometry and material
+            if (!noseGeometry) {
+                noseGeometry = new THREE.OctahedronGeometry(0.02, 1); // Default more angular nose
+            }
+            const noseMaterial = new THREE.MeshBasicMaterial({ color: noseColor });
+            const nose = new THREE.Mesh(noseGeometry, noseMaterial);
+            nose.position.set(0, 0.17, 0.11); // Moved slightly forward for better visibility
+            creatureGroup.add(nose);
+
+            // Add mouth - slightly different for each creature
+            const mouthGeometry = new THREE.BoxGeometry(0.03, 0.01, 0.01);
+            const mouthMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
+            mouth.position.set(0, 0.14, 0.11);
+            creatureGroup.add(mouth);
+
+            // Set position
+            creatureGroup.position.set(position.x, -0.2, position.z); // Start below ground
+
+            // Calculate animation speed variation by creature type
+            // Each creature has its own base speed characteristics and random variation
+            let baseSpeedMultiplier;
+            let randomVariation;
+
+            switch (selectedCreature.type) {
+                case 'mole': // Brown moles - moderately paced with moderate variation
+                    baseSpeedMultiplier = 1.0;
+                    randomVariation = 0.3; // ±30% variation
+                    break;
+                case 'redGopher': // Red gophers - faster with less predictability
+                    baseSpeedMultiplier = 0.8; // 20% faster than moles
+                    randomVariation = 0.4; // ±40% variation
+                    break;
+                case 'blueRabbit': // Blue rabbits - quite fast with high variation
+                    baseSpeedMultiplier = 0.7; // 30% faster than moles
+                    randomVariation = 0.5; // ±50% variation (very unpredictable)
+                    break;
+                case 'goldenMole': // Golden moles - fastest with extreme variation
+                    baseSpeedMultiplier = 0.6; // 40% faster than moles
+                    randomVariation = 0.6; // ±60% variation (extremely unpredictable)
+                    break;
+                default:
+                    baseSpeedMultiplier = 1.0;
+                    randomVariation = 0.3;
+            }
+
+            // Apply random variation within the creature-specific range
+            const speedMultiplier = baseSpeedMultiplier * (1 - randomVariation + Math.random() * (randomVariation * 2));
+
+            // Calculate the final duration for this creature instance
+            const actualDuration = Math.floor(moleSpeed * speedMultiplier);
+
+            creatureGroup.userData = {
+                isMole: true,
+                active: true,
+                startTime: Date.now(),
+                duration: actualDuration,
+                holeRef: holeRef,  // Reference to the hole this mole is in
+                position: position,
+                creatureType: selectedCreature,
+                pointValue: selectedCreature.pointValue
+            };
+
+            return creatureGroup;
+        }
+
+        // Create a hole at a specific position
+        function createHole(position) {
+            const holeGeometry = new THREE.CircleGeometry(0.15, 32);
+            const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x3E2723 });
+
+            const hole = new THREE.Mesh(holeGeometry, holeMaterial);
+            hole.position.set(position.x, 0.01, position.z); // Slightly above ground to avoid z-fighting
+            hole.rotation.x = -Math.PI / 2;
+            hole.userData = { isHole: true, position: position };
+            hole.scale.set(0, 0, 0); // Start with zero scale
+
+            floorGroup.add(hole);
+            activeHoles.push(hole);
+
+            // Animate hole appearing
+            animateHoleAppear(hole);
+
+            return hole;
+        }
+
+        // Animate hole appearance
+        function animateHoleAppear(hole) {
+            const duration = 200; // ms
             const startTime = Date.now();
-            const timerInterval = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                gameState.timeRemaining = Math.max(0, config.gameTime / 1000 - elapsed);
-                if (gameState.timeRemaining <= 0) {
-                    clearInterval(timerInterval);
-                    endGame();
+
+            function update() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                hole.scale.set(progress, progress, progress);
+
+                if (progress < 1) {
+                    requestAnimationFrame(update);
                 }
-                updatePowerups();
-                updateScoreboard();
-            }, 1000);
-        }
-
-        function endGame() {
-            gameState.isPlaying = false;
-            document.querySelector('#gameOverUI').setAttribute('text', `value: Game Over!\nFinal Score: ${gameState.score}\nPull trigger to restart; width: 1; align: center;`);
-            document.querySelector('#gameOverUI').setAttribute('visible', true);
-            returnAllToPool();
-        }
-
-        function resetGameState(fullReset = true) {
-            gameState.score = 0;
-            gameState.timeRemaining = 60;
-            gameState.scoreMultiplier = 1;
-            gameState.slowGophers = false;
-            gameState.powerupTimeRemaining = 0;
-            gameState.powerupType = null;
-            if (fullReset) {
-                gameState.floorMarked = false;
-                gameState.isPlaying = false;
-                document.querySelector('#gameArea').setAttribute('visible', false);
-                document.querySelector('#startUI').setAttribute('visible', true);
             }
+
+            update();
         }
 
-        function returnAllToPool() {
-            ['activeGophers', 'activeProjectiles', 'explosions', 'powerups'].forEach(type => {
-                gameState[type].forEach(item => {
-                    item.element.setAttribute('visible', false);
-                    pools[type.replace('active', '').toLowerCase()].push(item.element);
+        // Animate hole disappearing
+        function animateHoleDisappear(hole) {
+            const duration = 200; // ms
+            const startTime = Date.now();
+            const startScale = { x: hole.scale.x, y: hole.scale.y, z: hole.scale.z };
+
+            function update() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                const scale = 1 - progress;
+                hole.scale.set(scale, scale, scale);
+
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                } else {
+                    floorGroup.remove(hole);
+                    activeHoles = activeHoles.filter(h => h !== hole);
+                }
+            }
+
+            update();
+        }
+
+        // Spawn a mole at a random position
+        function spawnMole() {
+            if (!gameActive) return;
+
+            // Get available positions that don't have active moles or holes
+            const availablePositions = holePositions.filter(pos => {
+                // Check if any active mole or hole is at this position
+                return !activeMoles.some(mole =>
+                    mole.position.x === pos.x && mole.position.z === pos.z
+                ) && !activeHoles.some(hole =>
+                    hole.position.x === pos.x && hole.position.z === pos.z
+                );
+            });
+
+            if (availablePositions.length === 0) return;
+
+            // Select a random position
+            const position = availablePositions[Math.floor(Math.random() * availablePositions.length)];
+
+            // Create a hole
+            const hole = createHole(position);
+
+            // Wait for the hole to appear before creating the mole
+            setTimeout(() => {
+                // Create and add mole
+                const mole = createMole(position, hole);
+                activeMoles.push(mole);
+                moleGroup.add(mole);
+
+                // Animate mole coming up
+                animateMoleUp(mole);
+
+                // Schedule mole to go back down
+                setTimeout(() => {
+                    if (mole.userData.active) {
+                        animateMoleDown(mole);
+                    }
+                }, mole.userData.duration);
+            }, 250); // Wait for hole to appear
+        }
+
+        // Animate mole coming up with varied animation speed by creature type
+        function animateMoleUp(mole) {
+            const startY = mole.position.y;
+            const targetY = 0;
+
+            // Vary animation duration based on creature type
+            let duration = 300; // Default
+
+            if (mole.userData && mole.userData.creatureType) {
+                switch (mole.userData.creatureType.type) {
+                    case 'mole':
+                        duration = 300; // Brown moles - standard speed
+                        break;
+                    case 'redGopher':
+                        duration = 250; // Red gophers - slightly faster
+                        break;
+                    case 'blueRabbit':
+                        duration = 200; // Blue rabbits - quite fast
+                        break;
+                    case 'goldenMole':
+                        duration = 150; // Golden moles - very fast
+                        break;
+                }
+
+                // Add some random variation (±20%)
+                duration = Math.floor(duration * (0.8 + Math.random() * 0.4));
+            }
+
+            const startTime = Date.now();
+
+            function update() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Use a slight ease-out effect for more natural movement
+                const easedProgress = 1 - Math.pow(1 - progress, 2);
+                mole.position.y = startY + (targetY - startY) * easedProgress;
+
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                }
+            }
+
+            update();
+        }
+
+        // Animate mole going down with varied animation speed by creature type
+        function animateMoleDown(mole) {
+            const startY = mole.position.y;
+            const targetY = -0.2;
+
+            // Vary animation duration based on creature type
+            let duration = 300; // Default
+
+            if (mole.userData && mole.userData.creatureType) {
+                switch (mole.userData.creatureType.type) {
+                    case 'mole':
+                        duration = 300; // Brown moles - standard speed
+                        break;
+                    case 'redGopher':
+                        duration = 270; // Red gophers - slightly faster
+                        break;
+                    case 'blueRabbit':
+                        duration = 230; // Blue rabbits - quite fast
+                        break;
+                    case 'goldenMole':
+                        duration = 180; // Golden moles - very fast
+                        break;
+                }
+
+                // Add some random variation (±15%)
+                duration = Math.floor(duration * (0.85 + Math.random() * 0.3));
+            }
+
+            const startTime = Date.now();
+
+            function update() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Use a slight ease-in effect for more natural movement
+                const easedProgress = progress * progress;
+                mole.position.y = startY + (targetY - startY) * easedProgress;
+
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                } else {
+                    // Mark as inactive when animation completes
+                    mole.userData.active = false;
+
+                    // PENALTY SYSTEM: Subtract points for missed creatures
+                    if (mole.userData.creatureType && !mole.userData.wasHit) {
+                        const penalty = mole.userData.creatureType.pointValue;
+                        score = Math.max(0, score - penalty); // Don't let score go below 0
+                        levelScore = Math.max(0, levelScore - penalty); // Don't let level score go below 0
+
+                        // Update score display
+                        updateScoreSign(scoreSign, score);
+
+                        // Show penalty indicator
+                        showPenaltyEffect(mole.position, penalty);
+
+                        console.log(`Missed ${mole.userData.creatureType.type}! -${penalty} points. Score: ${score}`);
+                    }
+
+                    // Remove mole after animation
+                    moleGroup.remove(mole);
+                    activeMoles = activeMoles.filter(m => m !== mole);
+
+                    // Also remove the hole
+                    if (mole.userData.holeRef && floorGroup.children.includes(mole.userData.holeRef)) {
+                        animateHoleDisappear(mole.userData.holeRef);
+                    }
+                }
+            }
+
+            // Keep mole active during descent animation so it can still be hit
+            update();
+        }
+
+        // Create level complete UI
+        function createLevelCompleteUI() {
+            // Remove existing UI if present
+            if (levelCompleteUI) {
+                document.body.removeChild(levelCompleteUI);
+            }
+
+            levelCompleteUI = document.createElement('div');
+            levelCompleteUI.style.position = 'absolute';
+            levelCompleteUI.style.left = '50%';
+            levelCompleteUI.style.top = '50%';
+            levelCompleteUI.style.transform = 'translate(-50%, -50%)';
+            levelCompleteUI.style.textAlign = 'center';
+            levelCompleteUI.style.backgroundColor = 'rgba(0,0,0,0.7)';
+            levelCompleteUI.style.color = 'white';
+            levelCompleteUI.style.padding = '20px';
+            levelCompleteUI.style.borderRadius = '5px';
+            levelCompleteUI.style.zIndex = '100';
+
+            const levelTitle = document.createElement('h2');
+            levelTitle.textContent = `Level ${level} Complete!`;
+            levelTitle.style.color = '#FFD700';
+            levelCompleteUI.appendChild(levelTitle);
+
+            const scoreInfo = document.createElement('p');
+            scoreInfo.textContent = `Score: ${score}`;
+            levelCompleteUI.appendChild(scoreInfo);
+
+            const timeInfo = document.createElement('p');
+            timeInfo.textContent = `Time: ${formatTime(gameTimer)}`;
+            levelCompleteUI.appendChild(timeInfo);
+
+            // Show which new creature is unlocked if applicable
+            if (level < creatureTypes.length) {
+                const newCreature = creatureTypes.find(c => c.minLevel === level + 1);
+                if (newCreature) {
+                    const unlockInfo = document.createElement('p');
+                    unlockInfo.textContent = `New creature unlocked: ${getCreatureDisplayName(newCreature.type)}!`;
+                    unlockInfo.style.color = '#' + newCreature.color.toString(16).padStart(6, '0');
+                    levelCompleteUI.appendChild(unlockInfo);
+                }
+            }
+
+            // If this is the final level, add a congratulations message
+            if (level >= 4) {
+                const congratsMessage = document.createElement('h3');
+                congratsMessage.textContent = 'Congratulations! You completed all levels!';
+                congratsMessage.style.color = '#FFD700';
+                congratsMessage.style.marginTop = '15px';
+                levelCompleteUI.appendChild(congratsMessage);
+
+                const finalMessage = document.createElement('p');
+                finalMessage.textContent = `You found all creature types and earned ${score} total points.`;
+                levelCompleteUI.appendChild(finalMessage);
+            }
+
+            const nextButton = document.createElement('button');
+
+            if (level >= 4) {
+                // This is the final level completion
+                nextButton.textContent = 'Restart Game';
+                nextButton.addEventListener('click', () => {
+                    // Restart the game from level 1
+                    if (levelCompleteUI) {
+                        document.body.removeChild(levelCompleteUI);
+                        levelCompleteUI = null;
+                    }
+                    startGame();
                 });
-                gameState[type] = [];
-            });
-        }
-
-        function scheduleNextGopherSpawn() {
-            if (!gameState.isPlaying) return;
-            const delay = Math.random() * (config.gopherSpawnInterval[1] - config.gopherSpawnInterval[0]) + config.gopherSpawnInterval[0];
-            setTimeout(() => {
-                if (gameState.isPlaying) {
-                    spawnGopher();
-                    scheduleNextGopherSpawn();
-                }
-            }, delay);
-        }
-
-        function scheduleNextPowerupSpawn() {
-            if (!gameState.isPlaying) return;
-            const delay = Math.random() * (config.powerupSpawnInterval[1] - config.powerupSpawnInterval[0]) + config.powerupSpawnInterval[0];
-            setTimeout(() => {
-                if (gameState.isPlaying && Math.random() < config.powerupChance) {
-                    spawnPowerup();
-                }
-                scheduleNextPowerupSpawn();
-            }, delay);
-        }
-
-        function spawnGopher() {
-            if (gameState.activeGophers.length >= config.maxGophers) return;
-            let gopherType = selectGopherType();
-            let gopher = getOrCreateGopher(gopherType);
-            positionEntity(gopher, config.gopherSpawnArea);
-            const speed = gameState.slowGophers ? gopherType.speed * 0.5 : gopherType.speed;
-            gameState.activeGophers.push({
-                element: gopher,
-                type: gopherType,
-                createdAt: Date.now(),
-                state: 'rising',
-                speed: speed
-            });
-        }
-
-        function selectGopherType() {
-            const rand = Math.random();
-            let cumulative = 0;
-            for (const type in config.gopherTypes) {
-                cumulative += config.gopherTypes[type].chance;
-                if (rand < cumulative) {
-                    return { ...config.gopherTypes[type], name: type };
-                }
-            }
-        }
-
-        function getOrCreateGopher(gopherType) {
-            let gopher;
-            if (pools.gophers.length > 0) {
-                gopher = pools.gophers.pop();
-                gopher.setAttribute('visible', true);
             } else {
-                gopher = document.createElement('a-entity');
-                const body = document.createElement('a-cylinder');
-                body.setAttribute('height', '0.3');
-                body.setAttribute('radius', '0.1');
-                body.setAttribute('position', '0 0.15 0');
-                const head = document.createElement('a-sphere');
-                head.setAttribute('radius', '0.15');
-                head.setAttribute('position', '0 0.45 0');
-                gopher.appendChild(body);
-                gopher.appendChild(head);
-                document.querySelector('#gopherPool').appendChild(gopher);
+                // Continue to next level
+                nextButton.textContent = `Start Level ${level + 1}`;
+                nextButton.addEventListener('click', () => {
+                    startNextLevel();
+                });
             }
-            gopher.querySelectorAll('*').forEach(part => part.setAttribute('color', gopherType.color));
-            return gopher;
+
+            nextButton.style.padding = '10px 20px';
+            nextButton.style.backgroundColor = '#4CAF50';
+            nextButton.style.border = 'none';
+            nextButton.style.borderRadius = '4px';
+            nextButton.style.color = 'white';
+            nextButton.style.fontSize = '16px';
+            nextButton.style.cursor = 'pointer';
+            nextButton.style.marginTop = '15px';
+            levelCompleteUI.appendChild(nextButton);
+
+            document.body.appendChild(levelCompleteUI);
         }
 
-        function spawnPowerup() {
-            const powerupType = Object.values(config.powerupTypes)[Math.floor(Math.random() * Object.keys(config.powerupTypes).length)];
-            let powerup;
-            if (pools.powerups.length > 0) {
-                powerup = pools.powerups.pop();
-                powerup.setAttribute('visible', true);
-            } else {
-                powerup = document.createElement('a-box');
-                powerup.setAttribute('width', '0.2');
-                powerup.setAttribute('height', '0.2');
-                powerup.setAttribute('depth', '0.2');
-                document.querySelector('#powerupPool').appendChild(powerup);
-            }
-            powerup.setAttribute('color', powerupType.color);
-            powerup.setAttribute('material', 'emissive: ' + powerupType.color + '; emissiveIntensity: 0.5');
-            positionEntity(powerup, config.gopherSpawnArea, 0.2);
-            gameState.powerups.push({ element: powerup, type: powerupType, createdAt: Date.now() });
-            setTimeout(() => despawnPowerup(powerup), 5000);
-        }
-
-        function positionEntity(entity, areaSize, yOffset = -0.5) {
-            const gameAreaPos = document.querySelector('#gameArea').getAttribute('position');
-            const halfSize = areaSize / 2;
-            const x = Math.random() * areaSize - halfSize + gameAreaPos.x;
-            const z = Math.random() * areaSize - halfSize + gameAreaPos.z;
-            entity.setAttribute('position', `${x} ${yOffset} ${z}`);
-        }
-
-        function despawnPowerup(powerup) {
-            const index = gameState.powerups.findIndex(p => p.element === powerup);
-            if (index !== -1) {
-                gameState.powerups.splice(index, 1);
-                powerup.setAttribute('visible', false);
-                pools.powerups.push(powerup);
+        // Get friendly name for creature type
+        function getCreatureDisplayName(type) {
+            switch (type) {
+                case 'mole': return 'Brown Mole';
+                case 'redGopher': return 'Red Gopher';
+                case 'blueRabbit': return 'Blue Rabbit';
+                case 'goldenMole': return 'Golden Mole';
+                default: return type;
             }
         }
 
+        // Format time as MM:SS
+        function formatTime(timeInMs) {
+            const totalSeconds = Math.floor(timeInMs / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Start the game
+        function startGame() {
+            score = 0;
+            levelScore = 0;
+            level = 1;
+            moleSpeed = 2000;
+            gameActive = true;
+            gamePaused = false;
+            gameTimer = 0;
+            levelStartTime = Date.now();
+            lastTimestamp = Date.now();
+            updateScoreSign(scoreSign, score);
+            updateTimer();
+
+            // Initialize audio context with user interaction
+            initAudioContext();
+
+       // Audio initialized - no background music needed
+
+            // Start spawning moles
+            spawnMoles();
+        }
+
+        // Start the next level
+        function startNextLevel() {
+            // Hide the level complete UI
+            if (levelCompleteUI) {
+                document.body.removeChild(levelCompleteUI);
+                levelCompleteUI = null;
+            }
+
+            // Increment level
+            level++;
+
+            // Reset level-specific variables
+            levelScore = 0;
+            moleSpeed = Math.max(800, 2000 - (level - 1) * 200);
+            gameActive = true;
+            gamePaused = false;
+            levelStartTime = Date.now();
+            lastTimestamp = Date.now();
+
+            // Clear any remaining moles and holes
+            while (moleGroup.children.length > 0) {
+                moleGroup.remove(moleGroup.children[0]);
+            }
+            activeMoles = [];
+
+            while (activeHoles.length > 0) {
+                const hole = activeHoles[0];
+                floorGroup.remove(hole);
+                activeHoles.shift();
+            }
+
+            updateScoreSign(scoreSign, score);
+            updateTimer();
+
+         // Audio already initialized - no background music needed
+
+            // Start spawning moles
+            spawnMoles();
+        }
+
+        // Update timer display
+        function updateTimer() {
+            if (!gameActive || gamePaused) return;
+
+            const currentTime = Date.now();
+            gameTimer += currentTime - lastTimestamp;
+            lastTimestamp = currentTime;
+
+            // Update timer display
+            timerDisplay.textContent = `Time: ${formatTime(gameTimer)}`;
+
+            // Schedule next update
+            requestAnimationFrame(updateTimer);
+        }
+
+        // Spawn multiple moles based on current level
+        function spawnMoles() {
+            if (!gameActive) return;
+
+            // Spawn moles based on level
+            const numMolesToSpawn = Math.min(level, 5); // Cap at 5 moles at once
+
+            for (let i = 0; i < numMolesToSpawn; i++) {
+                setTimeout(() => {
+                    spawnMole();
+                }, i * 500); // Stagger spawns
+            }
+
+            // Schedule next wave of moles
+            setTimeout(spawnMoles, moleSpeed + 1000);
+        }
+
+        // Handle controller select event (shooting)
+        function onSelect(event) {
+            if (!gameActive) return;
+
+            // Get controller position and direction
+            tempMatrix.identity().extractRotation(controller.matrixWorld);
+            raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+            // Check for intersections with moles
+            const intersects = raycaster.intersectObjects(moleGroup.children, true);
+
+            if (intersects.length > 0) {
+                // Find the mole group that was hit
+                let moleHit = intersects[0].object;
+                while (moleHit.parent && !moleHit.userData.isMole) {
+                    moleHit = moleHit.parent;
+                }
+
+                if (moleHit.userData && moleHit.userData.isMole && moleHit.userData.active) {
+                    hitMole(moleHit);
+                }
+            }
+        }
+
+        // Handle mouse click for fallback mode
+        function onMouseClick(event) {
+            if (!gameActive) return;
+
+            // Calculate mouse position in normalized device coordinates (-1 to +1)
+            const mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Update the raycaster
+            raycaster.setFromCamera(mouse, camera);
+
+            // Check for intersections with moles
+            const intersects = raycaster.intersectObjects(moleGroup.children, true);
+
+            if (intersects.length > 0) {
+                // Find the mole group that was hit
+                let moleHit = intersects[0].object;
+                while (moleHit.parent && !moleHit.userData.isMole) {
+                    moleHit = moleHit.parent;
+                }
+
+                if (moleHit.userData && moleHit.userData.isMole && moleHit.userData.active) {
+                    hitMole(moleHit);
+                }
+            }
+        }
+
+        // Create explosion particles at a position
         function createExplosion(position) {
-            let explosion;
-            if (pools.explosions.length > 0) {
-                explosion = pools.explosions.pop();
-                explosion.setAttribute('visible', true);
+            const numParticles = 20;
+            const particles = new THREE.Group();
+
+            // Create particle geometries and materials
+            const particleGeometry = new THREE.SphereGeometry(0.03, 8, 8);
+
+            // Different colors for particles
+            const colors = [
+                0x8B4513,  // Brown (mole color)
+                0xFF0000,  // Red
+                0xFF6600,  // Orange
+                0xFFFF00,  // Yellow
+            ];
+
+            // Create particles
+            for (let i = 0; i < numParticles; i++) {
+                const particleMaterial = new THREE.MeshBasicMaterial({
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                });
+
+                const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+
+                // Set random direction for particle
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+                const speed = 0.01 + Math.random() * 0.03;
+
+                const direction = new THREE.Vector3();
+                direction.x = Math.sin(phi) * Math.cos(theta);
+                direction.y = Math.cos(phi);
+                direction.z = Math.sin(phi) * Math.sin(theta);
+                direction.multiplyScalar(speed);
+
+                particle.position.copy(position);
+                particle.userData = {
+                    direction: direction,
+                    life: 1.0,
+                    decay: 0.02 + Math.random() * 0.03  // Random decay rate
+                };
+
+                particles.add(particle);
+            }
+
+            particlesGroup.add(particles);
+
+            // Remove particles after a certain time
+            setTimeout(() => {
+                if (particlesGroup.children.includes(particles)) {
+                    particlesGroup.remove(particles);
+                }
+            }, 2000);
+
+            return particles;
+        }
+
+        // Global audio context for better performance and compatibility
+        let globalAudioContext = null;
+
+        // Initialize audio context with user interaction
+        function initAudioContext() {
+            if (!globalAudioContext) {
+                try {
+                    globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (error) {
+                    console.error("Error creating audio context:", error);
+                    return false;
+                }
+            }
+
+            // Resume context if suspended
+            if (globalAudioContext.state === 'suspended') {
+                globalAudioContext.resume().catch(error => {
+                    console.error("Error resuming audio context:", error);
+                });
+            }
+
+            return globalAudioContext.state === 'running' || globalAudioContext.state === 'suspended';
+        }
+
+        // Create audio elements
+        function createHitSound() {
+            // Create function to play hit sound
+            hitSound = function () {
+                if (!initAudioContext()) return;
+
+                try {
+                    // Create oscillator
+                    const oscillator = globalAudioContext.createOscillator();
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(800, globalAudioContext.currentTime); // Start frequency
+                    oscillator.frequency.exponentialRampToValueAtTime(200, globalAudioContext.currentTime + 0.2); // End frequency
+
+                    // Create gain node for volume control
+                    const gainNode = globalAudioContext.createGain();
+                    gainNode.gain.setValueAtTime(0.3, globalAudioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, globalAudioContext.currentTime + 0.2);
+
+                    // Connect and start
+                    oscillator.connect(gainNode);
+                    gainNode.connect(globalAudioContext.destination);
+
+                    oscillator.start();
+                    oscillator.stop(globalAudioContext.currentTime + 0.2);
+
+                    // Clean up when done
+                    oscillator.onended = () => {
+                        oscillator.disconnect();
+                        gainNode.disconnect();
+                    };
+                } catch (error) {
+                    console.error("Error playing sound:", error);
+                }
+            };
+
+            // Hit sound created - no background music needed
+        }
+
+        // Create carnival-style background music using Web Audio API
+        function createBackgroundMusic() {
+            // Create function to initialize and play background music
+            backgroundMusic = {
+                audioContext: null,
+                isPlaying: false,
+                notes: [],
+                mainMelody: [
+                    { note: 'C5', duration: 0.25 },
+                    { note: 'G4', duration: 0.25 },
+                    { note: 'E4', duration: 0.25 },
+                    { note: 'G4', duration: 0.25 },
+                    { note: 'C5', duration: 0.25 },
+                    { note: 'G4', duration: 0.25 },
+                    { note: 'E4', duration: 0.5 },
+
+                    { note: 'B4', duration: 0.25 },
+                    { note: 'G4', duration: 0.25 },
+                    { note: 'D4', duration: 0.25 },
+                    { note: 'G4', duration: 0.25 },
+                    { note: 'B4', duration: 0.25 },
+                    { note: 'G4', duration: 0.25 },
+                    { note: 'D4', duration: 0.5 },
+
+                    { note: 'A4', duration: 0.25 },
+                    { note: 'F4', duration: 0.25 },
+                    { note: 'D4', duration: 0.25 },
+                    { note: 'F4', duration: 0.25 },
+                    { note: 'A4', duration: 0.25 },
+                    { note: 'F4', duration: 0.25 },
+                    { note: 'D4', duration: 0.5 },
+
+                    { note: 'G4', duration: 0.25 },
+                    { note: 'E4', duration: 0.25 },
+                    { note: 'C4', duration: 0.25 },
+                    { note: 'E4', duration: 0.25 },
+                    { note: 'G4', duration: 0.25 },
+                    { note: 'E4', duration: 0.25 },
+                    { note: 'C4', duration: 0.5 }
+                ],
+
+                // Note frequencies
+                noteFrequencies: {
+                    'C3': 130.81, 'C#3': 138.59, 'D3': 146.83, 'D#3': 155.56, 'E3': 164.81, 'F3': 174.61,
+                    'F#3': 185.00, 'G3': 196.00, 'G#3': 207.65, 'A3': 220.00, 'A#3': 233.08, 'B3': 246.94,
+                    'C4': 261.63, 'C#4': 277.18, 'D4': 293.66, 'D#4': 311.13, 'E4': 329.63, 'F4': 349.23,
+                    'F#4': 369.99, 'G4': 392.00, 'G#4': 415.30, 'A4': 440.00, 'A#4': 466.16, 'B4': 493.88,
+                    'C5': 523.25, 'C#5': 554.37, 'D5': 587.33, 'D#5': 622.25, 'E5': 659.25, 'F5': 698.46,
+                    'F#5': 739.99, 'G5': 783.99, 'G#5': 830.61, 'A5': 880.00, 'A#5': 932.33, 'B5': 987.77
+                },
+
+                // Start playing the music
+                start: function () {
+                    if (this.isPlaying || !initAudioContext()) return;
+
+                    try {
+                        this.isPlaying = true;
+                        this.playMainMelody(0);
+
+                        // Add bass accompaniment
+                        setTimeout(() => this.playBassLine(), 100);
+                    } catch (error) {
+                        console.error("Error starting background music:", error);
+                    }
+                },
+
+                // Stop the music
+                stop: function () {
+                    if (!this.isPlaying) return;
+
+                    // Clear any scheduled notes
+                    this.notes.forEach(noteInfo => {
+                        if (noteInfo.timeout) {
+                            clearTimeout(noteInfo.timeout);
+                        }
+                    });
+
+                    this.isPlaying = false;
+                    this.notes = [];
+                },
+
+                // Play the main melody
+                playMainMelody: function (index) {
+                    if (!this.isPlaying || !globalAudioContext) return;
+
+                    const noteInfo = this.mainMelody[index];
+                    const nextIndex = (index + 1) % this.mainMelody.length;
+
+                    // Play the current note
+                    this.playNote(noteInfo.note, noteInfo.duration, 0.15, 'sine');
+
+                    // Schedule the next note
+                    const timeout = setTimeout(() => {
+                        this.playMainMelody(nextIndex);
+                    }, noteInfo.duration * 1000);
+
+                    // Keep track of the timeout for cleanup
+                    this.notes.push({ timeout });
+                },
+
+                // Play bass accompaniment
+                playBassLine: function () {
+                    if (!this.isPlaying || !globalAudioContext) return;
+
+                    // Simple bass pattern that repeats
+                    const bassPattern = [
+                        { note: 'C3', duration: 1 },
+                        { note: 'G3', duration: 1 },
+                        { note: 'A3', duration: 1 },
+                        { note: 'G3', duration: 1 }
+                    ];
+
+                    let bassIndex = 0;
+
+                    const playNextBassNote = () => {
+                        if (!this.isPlaying || !this.audioContext) return;
+
+                        const bassNote = bassPattern[bassIndex];
+                        bassIndex = (bassIndex + 1) % bassPattern.length;
+
+                        // Play bass note
+                        this.playNote(bassNote.note, bassNote.duration, 0.3, 'triangle');
+
+                        // Schedule next bass note
+                        const timeout = setTimeout(playNextBassNote, bassNote.duration * 1000);
+                        this.notes.push({ timeout });
+                    };
+
+                    // Start the bass line
+                    playNextBassNote();
+                },
+
+                // Play a single note
+                playNote: function (noteName, duration, volume, waveType) {
+                    if (!globalAudioContext || !this.isPlaying) return;
+
+                    try {
+                        // Get the frequency for this note
+                        const frequency = this.noteFrequencies[noteName];
+                        if (!frequency) return;
+
+                        // Create oscillator
+                        const oscillator = globalAudioContext.createOscillator();
+                        oscillator.type = waveType || 'sine';
+                        oscillator.frequency.value = frequency;
+
+                        // Create gain node for volume and envelope
+                        const gainNode = globalAudioContext.createGain();
+
+                        // Create envelope
+                        const now = globalAudioContext.currentTime;
+                        gainNode.gain.setValueAtTime(0, now);
+                        gainNode.gain.linearRampToValueAtTime(volume, now + 0.05); // Quick attack
+                        gainNode.gain.setValueAtTime(volume, now + duration - 0.1); // Sustain
+                        gainNode.gain.linearRampToValueAtTime(0, now + duration); // Release
+
+                        // Connect and start
+                        oscillator.connect(gainNode);
+                        gainNode.connect(globalAudioContext.destination);
+
+                        oscillator.start();
+                        oscillator.stop(now + duration);
+
+                        // Cleanup
+                        oscillator.onended = () => {
+                            oscillator.disconnect();
+                            gainNode.disconnect();
+                        };
+                    } catch (error) {
+                        console.error("Error playing note:", error);
+                    }
+                }
+            };
+        }
+
+        // Update particles in animation loop
+        function updateParticles() {
+            particlesGroup.children.forEach(particleSystem => {
+                let allDead = true;
+
+                particleSystem.children.forEach(particle => {
+                    // Update position based on direction
+                    particle.position.add(particle.userData.direction);
+
+                    // Apply gravity
+                    particle.userData.direction.y -= 0.0005;
+
+                    // Update life
+                    particle.userData.life -= particle.userData.decay;
+
+                    if (particle.userData.life > 0) {
+                        // Scale particle based on remaining life
+                        const scale = particle.userData.life;
+                        particle.scale.set(scale, scale, scale);
+                        allDead = false;
+                    } else {
+                        particle.visible = false;
+                    }
+                });
+
+                if (allDead) {
+                    particleSystem.visible = false;
+                }
+            });
+        }
+
+        // Handle hitting a mole
+        function hitMole(mole) {
+            // If game is paused, do nothing
+            if (gamePaused) return;
+
+            // Mark as inactive and hit
+            mole.userData.active = false;
+            mole.userData.wasHit = true;
+
+            // Create explosion effect at mole position
+            const explosionPos = new THREE.Vector3().copy(mole.position);
+            explosionPos.y += 0.1; // Adjust to be at the center of the mole
+            createExplosion(explosionPos);
+
+            // Play hit sound
+            if (hitSound) hitSound();
+
+            // Remove the mole immediately
+            moleGroup.remove(mole);
+            activeMoles = activeMoles.filter(m => m !== mole);
+
+            // Also remove the hole with animation
+            if (mole.userData.holeRef && floorGroup.children.includes(mole.userData.holeRef)) {
+                animateHoleDisappear(mole.userData.holeRef);
+            }
+
+            // Update score based on creature point value
+            const pointsAwarded = mole.userData.pointValue || 1; // Default to 1 if not defined
+            score += pointsAwarded;
+            levelScore += pointsAwarded;
+
+            // Show floating score text
+            showFloatingScore(pointsAwarded, explosionPos);
+
+            // Update score display
+            updateScoreSign(scoreSign, score);
+
+            // Check for level completion
+            const levelGoal = levelGoals[Math.min(level - 1, levelGoals.length - 1)];
+            if (levelScore >= levelGoal) {
+                completedLevel();
+            }
+        }
+
+        // Show floating score text
+        function showFloatingScore(points, position) {
+            // Create canvas for text
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            // Set text properties based on points
+            ctx.font = 'bold 48px Arial';
+
+            // Choose color based on points
+            if (points === 1) {
+                ctx.fillStyle = '#FFFFFF'; // White for 1 point
+            } else if (points === 2) {
+                ctx.fillStyle = '#FF6666'; // Red for 2 points
+            } else if (points === 3) {
+                ctx.fillStyle = '#6666FF'; // Blue for 3 points
             } else {
-                explosion = document.createElement('a-sphere');
-                explosion.setAttribute('radius', '0.1');
-                explosion.setAttribute('opacity', '0.8');
-                explosion.setAttribute('material', 'emissive: yellow; emissiveIntensity: 0.8');
-                document.querySelector('#explosionPool').appendChild(explosion);
+                ctx.fillStyle = '#FFDD00'; // Gold for 5 points
             }
-            explosion.setAttribute('position', position);
-            explosion.setAttribute('scale', '0.1 0.1 0.1');
-            gameState.explosions.push({ element: explosion, createdAt: Date.now() });
-        }
 
-        function applyPowerup(powerupType) {
-            sounds.powerup();
-            if (powerupType.effect === 'doubleScore') {
-                gameState.scoreMultiplier = 2;
-                gameState.powerupType = 'doubleScore';
-            } else if (powerupType.effect === 'slowGophers') {
-                gameState.slowGophers = true;
-                gameState.powerupType = 'slowGophers';
-            }
-            gameState.powerupTimeRemaining = config.powerupDuration / 1000;
-        }
+            // Add glow/shadow for better visibility
+            ctx.shadowColor = 'black';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
 
-        function updatePowerups() {
-            if (gameState.powerupTimeRemaining > 0) {
-                gameState.powerupTimeRemaining -= 1;
-                if (gameState.powerupTimeRemaining <= 0) {
-                    gameState.scoreMultiplier = 1;
-                    gameState.slowGophers = false;
-                    gameState.powerupType = null;
+            // Draw text
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`+${points}`, canvas.width / 2, canvas.height / 2);
+
+            // Create texture and sprite
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
+
+            // Position sprite
+            sprite.position.copy(position);
+            sprite.position.y += 0.15; // Position above the explosion
+            sprite.scale.set(0.3, 0.15, 1);
+
+            scene.add(sprite);
+
+            // Animate sprite rising and fading
+            const startTime = Date.now();
+            const duration = 1000; // 1 second
+
+            function animateScore() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Move upward
+                sprite.position.y += 0.003;
+
+                // Fade out
+                sprite.material.opacity = 1 - progress;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateScore);
+                } else {
+                    // Remove sprite when animation completes
+                    scene.remove(sprite);
+                    sprite.material.dispose();
+                    texture.dispose();
                 }
             }
+
+            animateScore();
         }
 
-        function checkCollisions() {
-            gameState.activeProjectiles.forEach((projectile, pIndex) => {
-                const pPos = projectile.element.getAttribute('position');
-                gameState.activeGophers.forEach((gopher, gIndex) => {
-                    if (gopher.state !== 'visible') return;
-                    const gPos = gopher.element.getAttribute('position');
-                    if (isCollision(pPos, gPos, config.gopherHitRadius)) {
-                        handleGopherHit(gopher, gIndex, pPos);
-                        removeProjectile(projectile, pIndex);
-                    }
-                });
-                gameState.powerups.forEach((powerup, puIndex) => {
-                    const puPos = powerup.element.getAttribute('position');
-                    if (isCollision(pPos, puPos, config.powerupHitRadius)) {
-                        applyPowerup(powerup.type);
-                        createExplosion(puPos);
-                        gameState.powerups.splice(puIndex, 1);
-                        powerup.element.setAttribute('visible', false);
-                        pools.powerups.push(powerup.element);
-                        removeProjectile(projectile, pIndex);
-                    }
-                });
-            });
-        }
+        // Show penalty effect when creatures are missed
+        function showPenaltyEffect(penalty, position) {
+            // Create canvas for text
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
 
-        function isCollision(pos1, pos2, radius) {
-            const dx = pos1.x - pos2.x;
-            const dy = pos1.y - pos2.y;
-            const dz = pos1.z - pos2.z;
-            return Math.sqrt(dx * dx + dy * dy + dz * dz) < radius;
-        }
+            // Set text properties
+            ctx.font = 'bold 48px Arial';
+            ctx.fillStyle = '#FF3333'; // Red for penalty
 
-        function handleGopherHit(gopher, index, position) {
-            gopher.state = 'hit';
-            gameState.score += gopher.type.points * gameState.scoreMultiplier;
-            updateScoreboard();
-            createExplosion(position);
-            sounds.hit();
-        }
+            // Add glow/shadow for better visibility
+            ctx.shadowColor = 'black';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
 
-        function removeProjectile(projectile, index) {
-            projectile.element.setAttribute('visible', false);
-            pools.projectiles.push(projectile.element);
-            gameState.activeProjectiles.splice(index, 1);
-        }
+            // Draw penalty text
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`-${penalty}`, canvas.width / 2, canvas.height / 2);
 
-        function updateScoreboard() {
-            document.querySelector('#scoreText').setAttribute('value', `Score: ${gameState.score}`);
-            document.querySelector('#timeText').setAttribute('value', `Time: ${gameState.timeRemaining}`);
-            document.querySelector('#powerupText').setAttribute('value', gameState.powerupType ? `${gameState.powerupType === 'doubleScore' ? 'Double Score' : 'Slow Gophers'}: ${gameState.powerupTimeRemaining}s` : '');
-        }
+            // Create texture and sprite
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
 
-        let lastTime = 0;
-        function gameLoop(time) {
-            if (!gameState.isPlaying) return;
-            const delta = (time - lastTime) / 1000;
-            lastTime = time;
-            const now = Date.now();
+            // Position sprite
+            sprite.position.copy(position);
+            sprite.position.y += 0.15; // Position above the mole
+            sprite.scale.set(0.3, 0.15, 1);
 
-            updateProjectiles(delta, now);
-            updateGophers(delta, now);
-            updateExplosions(now);
-            checkCollisions();
+            scene.add(sprite);
 
-            requestAnimationFrame(gameLoop);
-        }
+            // Animate sprite sinking and fading (opposite of score)
+            const startTime = Date.now();
+            const duration = 1000; // 1 second
 
-        function updateProjectiles(delta, now) {
-            gameState.activeProjectiles.forEach((projectile, index) => {
-                if (now - projectile.createdAt > config.projectileLifetime) {
-                    projectile.element.setAttribute('visible', false);
-                    pools.projectiles.push(projectile.element);
-                    gameState.activeProjectiles.splice(index, 1);
-                    return;
+            function animatePenalty() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Move downward (opposite of score)
+                sprite.position.y -= 0.002;
+
+                // Fade out
+                sprite.material.opacity = 1 - progress;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animatePenalty);
+                } else {
+                    // Remove sprite when animation completes
+                    scene.remove(sprite);
+                    sprite.material.dispose();
+                    texture.dispose();
                 }
-                const pos = projectile.element.getAttribute('position');
-                const vel = projectile.velocity;
-                projectile.element.setAttribute('position', {
-                    x: pos.x + vel.x * delta,
-                    y: pos.y + vel.y * delta,
-                    z: pos.z + vel.z * delta
-                });
-            });
+            }
+
+            animatePenalty();
         }
 
-        function updateGophers(delta, now) {
-            gameState.activeGophers.forEach((gopher, index) => {
-                const pos = gopher.element.getAttribute('position');
-                if (gopher.state === 'rising') {
-                    pos.y += 0.5 * gopher.speed * delta;
-                    if (pos.y >= 0) {
-                        pos.y = 0;
-                        gopher.state = 'visible';
-                        setTimeout(() => gopher.state = 'lowering', config.gopherLifetime);
-                    }
-                } else if (gopher.state === 'lowering' || gopher.state === 'hit') {
-                    pos.y -= 0.5 * gopher.speed * delta;
-                    if (pos.y <= -0.5) {
-                        gopher.element.setAttribute('visible', false);
-                        pools.gophers.push(gopher.element);
-                        gameState.activeGophers.splice(index, 1);
-                        return;
-                    }
-                }
-                gopher.element.setAttribute('position', pos);
-            });
+        // Complete the current level
+        function completedLevel() {
+            // Pause the game
+            gamePaused = true;
+            gameActive = false;
+
+            // Stop any active mole spawning
+            // (We'll let existing moles finish their animations)
+
+            // Level completed - no background music to stop
+
+            // Show level complete UI
+            setTimeout(() => {
+                createLevelCompleteUI();
+            }, 1000); // Wait a second to let any final animations complete
         }
 
-        function updateExplosions(now) {
-            gameState.explosions.forEach((explosion, index) => {
-                const age = now - explosion.createdAt;
-                if (age > 500) {
-                    explosion.element.setAttribute('visible', false);
-                    pools.explosions.push(explosion.element);
-                    gameState.explosions.splice(index, 1);
-                    return;
-                }
-                const scale = 0.1 + (age / 500) * 1.5;
-                const opacity = 0.8 - (age / 500) * 0.8;
-                explosion.element.setAttribute('scale', `${scale} ${scale} ${scale}`);
-                explosion.element.setAttribute('opacity', opacity);
-            });
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // Event listeners
-        document.addEventListener('DOMContentLoaded', () => {
-            const startButton = document.getElementById('startARButton');
-            const scene = document.querySelector('a-scene');
-            startButton.addEventListener('click', () => {
-                scene.enterVR();
-                startButton.style.display = 'none';
-                console.log('AR session requested');
-            });
-            scene.addEventListener('loaded', () => console.log('Scene loaded'));
-            scene.addEventListener('enter-vr', () => console.log('Entered AR'));
-            scene.addEventListener('exit-vr', () => {
-                console.log('Exited AR');
-                if (gameState.isPlaying) endGame();
-                startButton.style.display = 'block';
-                resetGameState();
-            });
-        });
+        // Main render loop
+        function render(timestamp, frame) {
+            // Update particle animations
+            updateParticles();
+
+            // Render scene
+            renderer.render(scene, camera);
+        }
+
+        // Initialize everything
+        init();
     </script>
+</head>
+
+<body>
+    <div id="container"></div>
+    <div id="info">Score: 0 | Level: 1</div>
+    <button id="startAR" class="hidden">Start AR Game</button>
 </body>
+
 </html>
