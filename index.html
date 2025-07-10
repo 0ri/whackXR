@@ -378,7 +378,66 @@
     </div>
 
     <!-- Three.js CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r150/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r150/three.min.js"
+        onerror="console.error('Failed to load Three.js from CDN'); loadThreeJSFallback();"></script>
+
+    <script>
+        // Error display function (defined early)
+        function showError(message) {
+            const errorElement = document.getElementById('error-message');
+            const errorText = document.getElementById('error-text');
+            if (errorElement && errorText) {
+                errorText.textContent = message;
+                errorElement.style.display = 'block';
+            } else {
+                alert(message); // Fallback if DOM elements not ready
+            }
+        }
+
+        // Three.js fallback loader
+        function loadThreeJSFallback() {
+            console.log('Loading Three.js fallback...');
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/three@0.150.0/build/three.min.js';
+            script.onerror = function () {
+                console.error('Failed to load Three.js fallback. Please check your internet connection.');
+                showError('Failed to load required 3D graphics library. Please refresh the page.');
+            };
+            document.head.appendChild(script);
+        }
+
+        // Check if Three.js is loaded
+        function checkThreeJS() {
+            if (typeof THREE === 'undefined') {
+                console.error('THREE is not defined - Three.js failed to load');
+                showError('Failed to load 3D graphics library. Please refresh the page.');
+                return false;
+            }
+            console.log('Three.js loaded successfully:', THREE.REVISION);
+            return true;
+        }
+
+        // Wait for Three.js to load with timeout
+        function waitForThreeJS(timeout = 10000) {
+            return new Promise((resolve, reject) => {
+                const startTime = Date.now();
+
+                function checkLoad() {
+                    if (typeof THREE !== 'undefined') {
+                        console.log('Three.js loaded successfully:', THREE.REVISION);
+                        resolve(true);
+                    } else if (Date.now() - startTime > timeout) {
+                        console.error('Three.js loading timeout');
+                        reject(new Error('Three.js failed to load within timeout'));
+                    } else {
+                        setTimeout(checkLoad, 100);
+                    }
+                }
+
+                checkLoad();
+            });
+        }
+    </script>
 
     <script>
         // Global game state
@@ -2772,6 +2831,14 @@
         // Initialize Three.js with enhanced scene management and performance monitoring
         async function initializeThreeJS() {
             console.log('Initializing Three.js rendering engine...');
+
+            // Wait for Three.js to load properly
+            try {
+                await waitForThreeJS();
+            } catch (error) {
+                console.error('Three.js failed to load:', error);
+                throw new Error('Three.js library failed to load');
+            }
 
             // Create scene
             gameState.scene = new THREE.Scene();
@@ -7561,7 +7628,17 @@
         }
 
         // Initialize the app when the page loads
-        window.addEventListener('load', initializeApp);
+        window.addEventListener('load', async () => {
+            try {
+                // Wait for Three.js to be available
+                await waitForThreeJS();
+                console.log('Three.js confirmed loaded, initializing app...');
+                await initializeApp();
+            } catch (error) {
+                console.error('Failed to initialize app:', error);
+                showError('Failed to initialize the game. Please refresh the page.');
+            }
+        });
 
         // Run Brown Mole tests after page load for validation
         window.addEventListener('load', () => {
