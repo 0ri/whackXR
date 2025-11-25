@@ -64,6 +64,39 @@
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
+        // === DEBUG LOGGER FOR AR ===
+        let debugLog = null;
+        let debugMessages = [];
+        function createDebugLog() {
+            debugLog = document.createElement('div');
+            debugLog.id = 'debugLog';
+            debugLog.style.cssText = `
+                position: fixed; top: 10px; left: 10px; width: 400px; max-height: 300px;
+                background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 11px;
+                padding: 10px; overflow-y: auto; z-index: 9999; border-radius: 5px;
+                pointer-events: none;
+            `;
+            document.body.appendChild(debugLog);
+        }
+        function debugPrint(msg) {
+            const time = new Date().toLocaleTimeString();
+            debugMessages.push(`[${time}] ${msg}`);
+            if (debugMessages.length > 30) debugMessages.shift();
+            if (debugLog) debugLog.innerHTML = debugMessages.join('<br>');
+            console.log(msg);
+        }
+        // Capture all errors
+        window.onerror = (msg, url, line, col, error) => {
+            debugPrint(`ERROR: ${msg} at line ${line}`);
+            return false;
+        };
+        window.addEventListener('unhandledrejection', e => {
+            debugPrint(`PROMISE ERROR: ${e.reason}`);
+        });
+        // Create debug log immediately
+        createDebugLog();
+        debugPrint('Debug logger initialized');
+
         // Game state variables
         let scene, camera, renderer;
         let gameContainer;
@@ -1754,12 +1787,16 @@
 
         // Start AR session
         function startAR() {
+            debugPrint('startAR() called');
             // Initialize audio context on user interaction
             initAudioContext();
 
+            debugPrint('Requesting AR session...');
             navigator.xr.requestSession('immersive-ar', {
-                requiredFeatures: ['hit-test', 'local-floor']
+                requiredFeatures: ['local-floor'],
+                optionalFeatures: ['hit-test']
             }).then(onSessionStarted).catch(err => {
+                debugPrint('AR session error: ' + err.message);
                 console.error('Error starting AR session:', err);
                 showWebXRNotSupportedMessage('Error starting AR: ' + err.message);
             });
@@ -1812,43 +1849,59 @@
 
         // Handle AR session start
         function onSessionStarted(session) {
+            debugPrint('AR session started!');
             arSession = session;
-            renderer.xr.setReferenceSpaceType('local-floor');
-            renderer.xr.setSession(session);
+            
+            try {
+                debugPrint('Setting reference space...');
+                renderer.xr.setReferenceSpaceType('local-floor');
+                renderer.xr.setSession(session);
+                debugPrint('Session set on renderer');
 
-            // Setup controller for AR
-            controller = renderer.xr.getController(0);
-            controller.addEventListener('select', onSelect);
-            scene.add(controller);
+                // Setup controller for AR
+                debugPrint('Setting up controller...');
+                controller = renderer.xr.getController(0);
+                controller.addEventListener('select', onSelect);
+                scene.add(controller);
 
-            // Create controller grip
-            controllerGrip = renderer.xr.getControllerGrip(0);
-            scene.add(controllerGrip);
+                // Create controller grip
+                controllerGrip = renderer.xr.getControllerGrip(0);
+                scene.add(controllerGrip);
+                debugPrint('Controller added');
 
-            // Handle session end
-            session.addEventListener('end', onSessionEnd);
+                // Handle session end
+                session.addEventListener('end', onSessionEnd);
 
-            // Add lighting for AR mode
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
+                // Add lighting for AR mode
+                debugPrint('Adding lights...');
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(0, 10, 5);
-            scene.add(directionalLight);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(0, 10, 5);
+                scene.add(directionalLight);
 
-            // Initialize AR-compatible visual effects (particles and UI only)
-            initPhase4Particles();
-            initPhase5UI();
+                // Initialize AR-compatible visual effects (particles and UI only)
+                debugPrint('Initializing particles...');
+                initPhase4Particles();
+                initPhase5UI();
 
-            // Create scene content
-            createFloor();
-            createScoreSign();
+                // Create scene content
+                debugPrint('Creating floor...');
+                createFloor();
+                debugPrint('Creating score sign...');
+                createScoreSign();
 
-            // Start game
-            startGame();
+                // Start game
+                debugPrint('Starting game...');
+                startGame();
+                debugPrint('Game started! Active moles should spawn soon.');
 
-            // Hide UI elements in AR mode
-            document.getElementById('startAR').classList.add('hidden');
+                // Hide UI elements in AR mode
+                document.getElementById('startAR').classList.add('hidden');
+            } catch (e) {
+                debugPrint('ERROR in onSessionStarted: ' + e.message);
+            }
         }
 
         // Handle AR session end
@@ -2454,7 +2507,10 @@
 
         // Spawn a mole at a random position
         function spawnMole() {
-            if (!gameActive) return;
+            if (!gameActive) {
+                debugPrint('spawnMole: game not active');
+                return;
+            }
 
             // Get available positions that don't have active moles or holes
             const availablePositions = holePositions.filter(pos => {
@@ -2466,10 +2522,14 @@
                 );
             });
 
-            if (availablePositions.length === 0) return;
+            if (availablePositions.length === 0) {
+                debugPrint('spawnMole: no available positions');
+                return;
+            }
 
             // Select a random position
             const position = availablePositions[Math.floor(Math.random() * availablePositions.length)];
+            debugPrint(`Spawning mole at ${position.x}, ${position.z}`);
 
             // Create a hole
             const hole = createHole(position);
@@ -2867,6 +2927,8 @@
             levelStartTime = Date.now();
             lastTimestamp = Date.now();
             
+            debugPrint('startGame: gameActive=' + gameActive);
+            
             // Track games played
             gamesPlayed++;
             saveProgress();
@@ -2881,11 +2943,13 @@
             updateComboDisplay();
             
             // Initialize biome system
+            debugPrint('Initializing biome...');
             if (!biomeGroup) initBiome();
             const startBiome = settings.selectedBiome === 'random' 
                 ? Math.floor(Math.random() * biomesExpanded.length) 
                 : parseInt(settings.selectedBiome);
             setBiome(startBiome);
+            debugPrint('Biome set to: ' + biomesExpanded[startBiome]?.name);
             
             // Start power-up spawning
             startPowerUpSpawning();
@@ -2900,7 +2964,9 @@
             initAudioContext();
 
             // Start spawning moles
+            debugPrint('Calling spawnMoles...');
             spawnMoles();
+            debugPrint('spawnMoles called');
         }
 
         // Start the next level
