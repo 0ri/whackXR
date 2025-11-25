@@ -105,6 +105,13 @@
         let raycaster, tempMatrix;
         let floorGroup, moleGroup, scoreSign, particlesGroup;
         let levelCompleteUI;
+        
+        // VR UI elements
+        let vrNotificationGroup = null;
+        let vrScoreText = null;
+        let vrLevelText = null;
+        let vrMessageText = null;
+        let isVRMode = false;
 
         // === VISUAL ENHANCEMENT VARIABLES ===
         let composer = null;
@@ -179,18 +186,22 @@
             }
         ];
 
-        // Possible hole positions
-        const holePositions = [
-            { x: -0.8, z: -0.8 },
-            { x: 0, z: -0.5 },
-            { x: 0.8, z: -0.8 },
-            { x: -1, z: 0 },
-            { x: 0, z: 0 },
-            { x: 1, z: 0 },
-            { x: -0.8, z: 0.8 },
-            { x: 0, z: 0.5 },
-            { x: 0.8, z: 0.8 }
-        ];
+        // Possible hole positions - field is in FRONT of player (negative Z)
+        // Player stands at z=0, field extends from z=-0.5 to z=-2.5
+        // Randomized positions generated at runtime for variety
+        let holePositions = [];
+        
+        function generateHolePositions() {
+            holePositions = [];
+            // Create 12 randomized positions in front of player
+            for (let i = 0; i < 12; i++) {
+                holePositions.push({
+                    x: (Math.random() - 0.5) * 2.4,  // -1.2 to 1.2
+                    z: -0.6 - Math.random() * 1.8    // -0.6 to -2.4 (in front)
+                });
+            }
+        }
+        generateHolePositions();
 
         // Game settings
         let score = 0;
@@ -1157,7 +1168,7 @@
                         break;
                     case 'fly':
                         // Bird mole hovers and bobs
-                        mole.position.y = 0.1 + Math.sin(time * 0.003) * 0.1;
+                        mole.position.y = 0.2 + Math.sin(time * 0.003) * 0.1;
                         mole.rotation.z = Math.sin(time * 0.005) * 0.1;
                         break;
                     case 'magic':
@@ -1183,11 +1194,11 @@
                         break;
                     case 'sweet':
                         // Candy mole bounces in place
-                        mole.position.y = Math.abs(Math.sin(time * 0.005)) * 0.05;
+                        mole.position.y = 0.05 + Math.abs(Math.sin(time * 0.005)) * 0.05;
                         break;
                     case 'antigrav':
                         // Alien floats eerily
-                        mole.position.y = 0.05 + Math.sin(time * 0.002) * 0.08;
+                        mole.position.y = 0.15 + Math.sin(time * 0.002) * 0.08;
                         mole.rotation.y += 0.01;
                         break;
                 }
@@ -1363,14 +1374,15 @@
         }
 
         function create2DBackground() {
-            // Distant mountains (2D planes)
+            // 3D Mountains using cones
             const mountainColors = [0x4a6741, 0x5a7751, 0x3a5731];
-            for (let i = 0; i < 5; i++) {
-                const mountainGeo = new THREE.PlaneGeometry(4, 2);
-                const mountainMat = new THREE.MeshBasicMaterial({ color: mountainColors[i % 3], side: THREE.DoubleSide });
+            for (let i = 0; i < 7; i++) {
+                const height = 2 + Math.random() * 2;
+                const radius = 1.5 + Math.random();
+                const mountainGeo = new THREE.ConeGeometry(radius, height, 6);
+                const mountainMat = new THREE.MeshLambertMaterial({ color: mountainColors[i % 3] });
                 const mountain = new THREE.Mesh(mountainGeo, mountainMat);
-                mountain.position.set(-6 + i * 3, 1, -10);
-                mountain.scale.y = 0.8 + Math.random() * 0.6;
+                mountain.position.set(-9 + i * 3, height / 2 - 0.5, -10 - Math.random() * 2);
                 scene.add(mountain);
                 backgroundDecorations.push(mountain);
             }
@@ -1806,22 +1818,24 @@
             `;
             document.body.appendChild(menu);
             
-            // VR button handler
+            // VR button handler - show mode selection, don't auto-launch
             const vrBtn = document.getElementById('enterVRBtn');
             if (vrBtn) {
                 vrBtn.onclick = () => {
-                    menu.remove();
-                    startVRSession('endless');
+                    // Highlight that VR mode is selected, let user pick game mode
+                    vrBtn.textContent = '✓ VR MODE SELECTED - Pick a mode below';
+                    vrBtn.style.background = '#4CAF50';
+                    vrBtn.disabled = true;
+                    window.vrModeSelected = true;
                 };
             }
             
-            // 2D mode handlers
+            // Mode button handlers
             menu.querySelectorAll('.modeBtn').forEach(btn => {
                 btn.onclick = () => {
                     const selectedMode = btn.dataset.mode;
                     menu.remove();
-                    if (vrSupported) {
-                        // On VR device, ask if they want VR or 2D
+                    if (window.vrModeSelected) {
                         startVRSession(selectedMode);
                     } else {
                         launchGame(selectedMode, false);
@@ -1866,8 +1880,12 @@
         }
         
         // Launch the game with selected mode
-        function launchGame(selectedMode, isVRMode = false) {
+        function launchGame(selectedMode, vrMode = false) {
+            isVRMode = vrMode;
             debugPrint('Launching game: mode=' + selectedMode + ', VR=' + isVRMode);
+            
+            // Regenerate hole positions for variety each game
+            generateHolePositions();
             
             // Initialize audio
             initAudioContext();
@@ -1888,13 +1906,19 @@
 
             // Position camera - VR mode uses headset tracking, 2D needs fixed position
             if (!isVRMode) {
-                camera.position.set(0, 1.6, 3);
-                camera.lookAt(0, 0, 0);
+                camera.position.set(0, 1.6, 2);
+                camera.lookAt(0, 0, -1.5);
             }
 
-            // Create floor and score sign
+            // Create floor
             createFloor();
-            createScoreSign();
+            
+            // Create appropriate UI
+            if (isVRMode) {
+                createVRNotificationUI();
+            } else {
+                createScoreSign();
+            }
 
             // Add mouse click interaction for desktop (non-VR)
             if (!isVRMode) {
@@ -1955,13 +1979,107 @@
             });
             const floor = new THREE.Mesh(floorGeometry, floorMaterial);
             floor.rotation.x = -Math.PI / 2;
-            floor.position.y = 0;
+            floor.position.y = 0; // Ground level for VR
+            floor.position.z = -1.5; // Center floor in front of player
             floorGroup.add(floor);
 
             // No pre-created holes - they will be created dynamically
         }
 
-        // Create score display sign
+        // Create VR floating notification UI
+        function createVRNotificationUI() {
+            vrNotificationGroup = new THREE.Group();
+            
+            // Position: 1.5m back from play area, at eye level
+            vrNotificationGroup.position.set(0, 1.2, -3.5);
+            
+            // Background panel
+            const panelGeo = new THREE.PlaneGeometry(1.5, 0.6);
+            const panelMat = new THREE.MeshBasicMaterial({ 
+                color: 0x000000, 
+                transparent: true, 
+                opacity: 0.7,
+                side: THREE.DoubleSide
+            });
+            const panel = new THREE.Mesh(panelGeo, panelMat);
+            vrNotificationGroup.add(panel);
+            
+            // Score text
+            vrScoreText = createVRText('Score: 0', 0.15);
+            vrScoreText.position.set(0, 0.15, 0.01);
+            vrNotificationGroup.add(vrScoreText);
+            
+            // Level text
+            vrLevelText = createVRText('Level: 1', 0.1);
+            vrLevelText.position.set(0, -0.05, 0.01);
+            vrNotificationGroup.add(vrLevelText);
+            
+            // Message text (for level complete, etc)
+            vrMessageText = createVRText('', 0.12);
+            vrMessageText.position.set(0, -0.2, 0.01);
+            vrNotificationGroup.add(vrMessageText);
+            
+            scene.add(vrNotificationGroup);
+        }
+        
+        // Create text sprite for VR
+        function createVRText(text, size = 0.1) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 256, 64);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(size * 4, size, 1);
+            sprite.userData.text = text;
+            return sprite;
+        }
+        
+        // Update VR text content
+        function updateVRText(sprite, text, color = '#FFD700') {
+            if (!sprite) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = color;
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 256, 64);
+            
+            sprite.material.map.dispose();
+            sprite.material.map = new THREE.CanvasTexture(canvas);
+            sprite.material.needsUpdate = true;
+            sprite.userData.text = text;
+        }
+        
+        // Update VR UI
+        function updateVRUI() {
+            if (!isVRMode || !vrNotificationGroup) return;
+            updateVRText(vrScoreText, `Score: ${score}`);
+            updateVRText(vrLevelText, `Level: ${level} | Combo: ${combo}x`);
+        }
+        
+        // Show VR message (level complete, etc)
+        function showVRMessage(message, duration = 3000) {
+            if (!isVRMode || !vrMessageText) return;
+            updateVRText(vrMessageText, message, '#00FF00');
+            if (duration > 0) {
+                setTimeout(() => updateVRText(vrMessageText, ''), duration);
+            }
+        }
+
+        // Create score display sign (for 2D mode only)
         function createScoreSign() {
             const signGroup = new THREE.Group();
 
@@ -1983,7 +2101,7 @@
             updateScoreSign(signGroup, 0);
 
             // Position sign in corner of play area
-            signGroup.position.set(1.2, 0, -1.2);
+            signGroup.position.set(1.2, 0, -2.5);
             signGroup.rotation.y = -Math.PI / 4;
 
             scoreSign = signGroup;
@@ -1992,12 +2110,20 @@
 
         // Update score on the sign
         function updateScoreSign(signGroup, score) {
+            // Update VR UI if in VR mode
+            if (isVRMode) {
+                updateVRUI();
+                return;
+            }
+            
             // Remove old score display if it exists
-            signGroup.children.forEach(child => {
-                if (child.userData && child.userData.isScoreText) {
-                    signGroup.remove(child);
-                }
-            });
+            if (signGroup) {
+                signGroup.children.forEach(child => {
+                    if (child.userData && child.userData.isScoreText) {
+                        signGroup.remove(child);
+                    }
+                });
+            }
 
             // Update score text in UI
             scoreDisplay.textContent = `Score: ${score} | Level: ${level}`;
@@ -2398,7 +2524,7 @@
             creatureGroup.add(mouth);
 
             // Set position
-            creatureGroup.position.set(position.x, -0.2, position.z); // Start below ground
+            creatureGroup.position.set(position.x, -0.2, position.z); // Start below ground (floor at y=0)
 
             // Calculate animation speed variation by creature type
             // Each creature has its own base speed characteristics and random variation
@@ -2481,7 +2607,7 @@
             const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x3E2723 });
 
             const hole = new THREE.Mesh(holeGeometry, holeMaterial);
-            hole.position.set(position.x, 0.01, position.z); // Slightly above ground to avoid z-fighting
+            hole.position.set(position.x, 0.01, position.z); // Just above floor at y=0
             hole.rotation.x = -Math.PI / 2;
             hole.userData = { isHole: true, position: position };
             hole.scale.set(0, 0, 0); // Start with zero scale
@@ -2615,7 +2741,7 @@
         // Animate mole coming up with varied animation speed by creature type
         function animateMoleUp(mole) {
             const startY = mole.position.y;
-            const targetY = 0.05; // Slightly above ground so body shows
+            const targetY = 0.05; // Pop up above floor (y=0)
 
             // Spawn dirt burst effect
             createDirtBurst(mole.position.clone());
@@ -2811,9 +2937,9 @@
                         });
                         break;
                     default:
-                        // Standard down animation
+                        // Standard down animation - go below ground (y=0)
                         const easedProgress = progress * progress;
-                        mole.position.y = startPos.y + (-0.3 - startPos.y) * easedProgress;
+                        mole.position.y = startPos.y + (-0.2 - startPos.y) * easedProgress;
                 }
 
                 if (progress < 1) {
@@ -2859,7 +2985,25 @@
 
         // Create level complete UI
         function createLevelCompleteUI() {
-            // HTML UI works for both desktop and VR browser
+            // In VR mode, use floating 3D text instead of HTML overlay
+            if (isVRMode) {
+                const msg = level >= 4 
+                    ? `🎉 ALL LEVELS COMPLETE! Score: ${score}` 
+                    : `Level ${level} Complete! Score: ${score}`;
+                showVRMessage(msg, 0); // 0 = don't auto-hide
+                
+                // Auto-advance after delay in VR
+                setTimeout(() => {
+                    if (level >= 4) {
+                        startGame();
+                    } else {
+                        startNextLevel();
+                    }
+                }, 3000);
+                return;
+            }
+            
+            // HTML UI for desktop mode
             if (levelCompleteUI) {
                 document.body.removeChild(levelCompleteUI);
             }
@@ -3912,7 +4056,7 @@
                 });
                 
                 // Subtle body bob
-                if (mole.position.y >= -0.05) {
+                if (mole.position.y >= 0) {
                     mole.children[0].position.y = 0.06 + Math.sin(time * 6) * 0.01;
                 }
             });
@@ -4048,7 +4192,7 @@
             const material = new THREE.MeshBasicMaterial({ color: type.color, transparent: true, opacity: 0.8 });
             const powerUp = new THREE.Mesh(geometry, material);
             
-            powerUp.position.set(position.x, 0.2, position.z);
+            powerUp.position.set(position.x, 0.3, position.z);
             powerUp.userData = { isPowerUp: true, type: type.type, duration: type.duration, spawnTime: Date.now() };
             
             scene.add(powerUp);
