@@ -1920,6 +1920,11 @@
                 debugPrint('Creating score sign...');
                 createScoreSign();
 
+                // START THE ANIMATION LOOP - THIS WAS MISSING!
+                debugPrint('Starting animation loop...');
+                renderer.setAnimationLoop(render);
+                debugPrint('Animation loop started');
+
                 // Start game
                 debugPrint('Starting game...');
                 startGame();
