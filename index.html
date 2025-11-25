@@ -193,11 +193,11 @@
         
         function generateHolePositions() {
             holePositions = [];
-            // Create 12 randomized positions in front of player
-            for (let i = 0; i < 12; i++) {
+            // Create 15 randomized positions - 50% larger area, further in front
+            for (let i = 0; i < 15; i++) {
                 holePositions.push({
-                    x: (Math.random() - 0.5) * 2.4,  // -1.2 to 1.2
-                    z: -0.6 - Math.random() * 1.8    // -0.6 to -2.4 (in front)
+                    x: (Math.random() - 0.5) * 3.6,  // -1.8 to 1.8 (50% wider)
+                    z: -1.0 - Math.random() * 2.7    // -1.0 to -3.7 (further forward, 50% longer)
                 });
             }
         }
@@ -1168,7 +1168,7 @@
                         break;
                     case 'fly':
                         // Bird mole hovers and bobs
-                        mole.position.y = 0.2 + Math.sin(time * 0.003) * 0.1;
+                        mole.position.y = 0.3 + Math.sin(time * 0.003) * 0.1;
                         mole.rotation.z = Math.sin(time * 0.005) * 0.1;
                         break;
                     case 'magic':
@@ -1194,11 +1194,11 @@
                         break;
                     case 'sweet':
                         // Candy mole bounces in place
-                        mole.position.y = 0.05 + Math.abs(Math.sin(time * 0.005)) * 0.05;
+                        mole.position.y = 0.15 + Math.abs(Math.sin(time * 0.005)) * 0.1;
                         break;
                     case 'antigrav':
                         // Alien floats eerily
-                        mole.position.y = 0.15 + Math.sin(time * 0.002) * 0.08;
+                        mole.position.y = 0.25 + Math.sin(time * 0.002) * 0.1;
                         mole.rotation.y += 0.01;
                         break;
                 }
@@ -1971,8 +1971,8 @@
 
         // Create floor with dirt texture
         function createFloor() {
-            // Create a simple brown floor to represent dirt
-            const floorGeometry = new THREE.PlaneGeometry(5, 5);
+            // Create a simple brown floor to represent dirt - 50% larger
+            const floorGeometry = new THREE.PlaneGeometry(7.5, 7.5);
             const floorMaterial = new THREE.MeshBasicMaterial({
                 color: 0x6B3D14, // Darker brown for dirt
                 side: THREE.DoubleSide
@@ -1980,7 +1980,7 @@
             const floor = new THREE.Mesh(floorGeometry, floorMaterial);
             floor.rotation.x = -Math.PI / 2;
             floor.position.y = 0; // Ground level for VR
-            floor.position.z = -1.5; // Center floor in front of player
+            floor.position.z = -2.35; // Center of play area
             floorGroup.add(floor);
 
             // No pre-created holes - they will be created dynamically
@@ -1990,33 +1990,33 @@
         function createVRNotificationUI() {
             vrNotificationGroup = new THREE.Group();
             
-            // Position: 1.5m back from play area, at eye level
-            vrNotificationGroup.position.set(0, 1.2, -3.5);
+            // Position: behind play area, at eye level
+            vrNotificationGroup.position.set(0, 1.4, -4.5);
             
             // Background panel
-            const panelGeo = new THREE.PlaneGeometry(1.5, 0.6);
+            const panelGeo = new THREE.PlaneGeometry(1.8, 0.8);
             const panelMat = new THREE.MeshBasicMaterial({ 
                 color: 0x000000, 
                 transparent: true, 
-                opacity: 0.7,
+                opacity: 0.8,
                 side: THREE.DoubleSide
             });
             const panel = new THREE.Mesh(panelGeo, panelMat);
             vrNotificationGroup.add(panel);
             
-            // Score text
-            vrScoreText = createVRText('Score: 0', 0.15);
-            vrScoreText.position.set(0, 0.15, 0.01);
+            // Score text - larger z-offset to prevent z-fighting
+            vrScoreText = createVRText('Score: 0', 0.18);
+            vrScoreText.position.set(0, 0.2, 0.05);
             vrNotificationGroup.add(vrScoreText);
             
             // Level text
-            vrLevelText = createVRText('Level: 1', 0.1);
-            vrLevelText.position.set(0, -0.05, 0.01);
+            vrLevelText = createVRText('Level: 1', 0.12);
+            vrLevelText.position.set(0, -0.05, 0.05);
             vrNotificationGroup.add(vrLevelText);
             
             // Message text (for level complete, etc)
-            vrMessageText = createVRText('', 0.12);
-            vrMessageText.position.set(0, -0.2, 0.01);
+            vrMessageText = createVRText('', 0.14);
+            vrMessageText.position.set(0, -0.25, 0.05);
             vrNotificationGroup.add(vrMessageText);
             
             scene.add(vrNotificationGroup);
@@ -2524,7 +2524,7 @@
             creatureGroup.add(mouth);
 
             // Set position
-            creatureGroup.position.set(position.x, -0.2, position.z); // Start below ground (floor at y=0)
+            creatureGroup.position.set(position.x, -0.15, position.z); // Start just below ground (floor at y=0)
 
             // Calculate animation speed variation by creature type
             // Each creature has its own base speed characteristics and random variation
@@ -2741,7 +2741,7 @@
         // Animate mole coming up with varied animation speed by creature type
         function animateMoleUp(mole) {
             const startY = mole.position.y;
-            const targetY = 0.05; // Pop up above floor (y=0)
+            const targetY = 0.15; // Pop up well above floor so full body visible
 
             // Spawn dirt burst effect
             createDirtBurst(mole.position.clone());
@@ -3189,6 +3189,12 @@
 
             // Increment level
             level++;
+            
+            // Change biome every level for variety
+            setBiome(currentBiome + 1);
+            
+            // Regenerate hole positions for variety
+            generateHolePositions();
 
             // Reset level-specific variables
             levelScore = 0;
@@ -4156,6 +4162,12 @@
         }
 
         function showBiomeNotification(biomeName) {
+            // Show in VR mode
+            if (isVRMode) {
+                showVRMessage(`🌍 ${biomeName} Biome`, 3000);
+                return;
+            }
+            
             const notification = document.createElement('div');
             notification.style.cssText = `
                 position: absolute; top: 120px; width: 100%; text-align: center;
@@ -4293,7 +4305,11 @@
                 if (gamePaused) return;
                 
                 const bossType = bossTypes[bossesDefeatedThisGame % bossTypes.length];
-                const position = { x: 0, z: 0 };
+                // Randomize boss position in play area
+                const position = { 
+                    x: (Math.random() - 0.5) * 2.5,  // Random X in field
+                    z: -1.5 - Math.random() * 1.5    // Random Z in front of player
+                };
                 const bossGroup = new THREE.Group();
                 
                 switch (bossType.style) {
@@ -4670,6 +4686,12 @@
         }
 
         function showChaosNotification(event) {
+            // Show in VR mode
+            if (isVRMode) {
+                showVRMessage(`${event.icon} ${event.name}! ${event.icon}`, event.duration);
+                return;
+            }
+            
             const notification = document.createElement('div');
             notification.id = 'chaosNotification';
             notification.style.cssText = `
