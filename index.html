@@ -270,7 +270,7 @@
         ];
         let activeChaosEvent = null;
         let chaosEventTimer = null;
-        const CHAOS_SPAWN_INTERVAL = 45000; // Every 45 seconds
+        const CHAOS_SPAWN_INTERVAL = 20000; // Every 20 seconds (was 45)
 
         // === WEAPON SYSTEM ===
         const weapons = [
@@ -1330,30 +1330,29 @@
 
         // === BACKGROUND DECORATIONS ===
         function createBackgroundDecorations() {
-            // Trees around the play area - larger radius, curved around player
-            for (let i = 0; i < 8; i++) {
+            // Trees 360 degrees around player
+            for (let i = 0; i < 12; i++) {
                 const tree = createTree();
-                // Semi-circle in front of player (not behind)
-                const angle = -Math.PI * 0.15 + (i / 7) * Math.PI * 1.3; // -27° to +207°
-                const radius = 5 + Math.random() * 1;
+                const angle = (i / 12) * Math.PI * 2;
+                const radius = 5.5 + Math.random() * 1.5;
                 tree.position.set(
                     Math.sin(angle) * radius,
                     0,
-                    -3.35 + Math.cos(angle) * radius // Centered on play area
+                    Math.cos(angle) * radius
                 );
                 tree.scale.setScalar(0.8 + Math.random() * 0.4);
                 scene.add(tree);
                 trees.push(tree);
             }
 
-            // Butterflies - keep them in the background/edges only
-            for (let i = 0; i < 4; i++) {
+            // Butterflies around player
+            for (let i = 0; i < 6; i++) {
                 const butterfly = createButterfly();
-                const angle = (i / 4) * Math.PI * 2;
+                const angle = (i / 6) * Math.PI * 2;
                 butterfly.position.set(
                     Math.cos(angle) * 4 + (Math.random() - 0.5),
                     1.5 + Math.random() * 1.5,
-                    -3.35 + Math.sin(angle) * 4 + (Math.random() - 0.5)
+                    Math.sin(angle) * 4 + (Math.random() - 0.5)
                 );
                 butterfly.userData = { 
                     phase: Math.random() * Math.PI * 2, 
@@ -1366,68 +1365,71 @@
                 butterflies.push(butterfly);
             }
 
-            // Flying birds in far background - curved around
-            for (let i = 0; i < 4; i++) {
+            // Flying birds 360 degrees, moving in circles
+            for (let i = 0; i < 6; i++) {
                 const bird = createBird();
-                const angle = -0.5 + (i / 3) * Math.PI;
+                const angle = (i / 6) * Math.PI * 2;
                 bird.position.set(
-                    Math.sin(angle) * 12,
+                    Math.sin(angle) * 10,
                     4 + Math.random() * 3,
-                    -6 + Math.cos(angle) * 8
+                    Math.cos(angle) * 10
                 );
-                bird.userData = { speed: 0.015 + Math.random() * 0.01, phase: Math.random() * Math.PI * 2 };
+                bird.userData = { 
+                    speed: 0.008 + Math.random() * 0.005, 
+                    phase: angle,
+                    radius: 8 + Math.random() * 4
+                };
                 scene.add(bird);
                 birds.push(bird);
             }
 
-            // 2D Background elements - mountains, hills, sun, clouds
+            // 2D Background elements
             create2DBackground();
         }
 
         function create2DBackground() {
-            // 3D Mountains curved around player in a semi-circle
+            // 3D Mountains 360 degrees around player
             const mountainColors = [0x4a6741, 0x5a7751, 0x3a5731];
-            for (let i = 0; i < 9; i++) {
-                const height = 2 + Math.random() * 2.5;
-                const radius = 1.5 + Math.random();
+            for (let i = 0; i < 16; i++) {
+                const height = 2 + Math.random() * 3;
+                const radius = 1.2 + Math.random() * 0.8;
                 const mountainGeo = new THREE.ConeGeometry(radius, height, 6);
                 const mountainMat = new THREE.MeshLambertMaterial({ color: mountainColors[i % 3] });
                 const mountain = new THREE.Mesh(mountainGeo, mountainMat);
-                // Curve around player in semi-circle
-                const angle = -0.6 + (i / 8) * Math.PI * 1.2;
-                const dist = 12 + Math.random() * 3;
+                const angle = (i / 16) * Math.PI * 2;
+                const dist = 14 + Math.random() * 4;
                 mountain.position.set(
                     Math.sin(angle) * dist,
                     height / 2 - 0.5,
-                    -3.35 + Math.cos(angle) * dist
+                    Math.cos(angle) * dist
                 );
                 scene.add(mountain);
                 backgroundDecorations.push(mountain);
             }
 
-            // Rolling hills curved around
-            for (let i = 0; i < 10; i++) {
+            // Rolling hills 360 degrees
+            for (let i = 0; i < 16; i++) {
                 const hillGeo = new THREE.SphereGeometry(1.2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
                 const hillMat = new THREE.MeshLambertMaterial({ color: 0x4a8f4a });
                 const hill = new THREE.Mesh(hillGeo, hillMat);
-                const angle = -0.4 + (i / 9) * Math.PI * 0.8;
-                const dist = 7 + Math.random() * 2;
+                const angle = (i / 16) * Math.PI * 2;
+                const dist = 8 + Math.random() * 2;
                 hill.position.set(
                     Math.sin(angle) * dist,
                     0,
-                    -3.35 + Math.cos(angle) * dist
+                    Math.cos(angle) * dist
                 );
                 hill.scale.set(1 + Math.random() * 0.5, 0.3 + Math.random() * 0.2, 1 + Math.random() * 0.5);
                 scene.add(hill);
                 backgroundDecorations.push(hill);
             }
 
-            // Sun - off to the side
+            // Sun
             const sunGeo = new THREE.CircleGeometry(0.8, 32);
-            const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFDD44 });
+            const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFDD44, side: THREE.DoubleSide });
             const sun = new THREE.Mesh(sunGeo, sunMat);
             sun.position.set(8, 6, -10);
-            sun.lookAt(0, 1.6, 0); // Face player
+            sun.lookAt(0, 1.6, 0);
             scene.add(sun);
             backgroundDecorations.push(sun);
 
@@ -1445,13 +1447,13 @@
                 backgroundDecorations.push(ray);
             }
 
-            // Background bushes around play area - larger radius
-            for (let i = 0; i < 16; i++) {
+            // Bushes around play area (in front half only - don't block player)
+            for (let i = 0; i < 20; i++) {
                 const bushGeo = new THREE.SphereGeometry(0.25 + Math.random() * 0.15, 8, 6);
                 const bushMat = new THREE.MeshLambertMaterial({ color: [0x2d5a2d, 0x3d6a3d, 0x4d7a4d][i % 3] });
                 const bush = new THREE.Mesh(bushGeo, bushMat);
-                const angle = -0.3 + (i / 15) * Math.PI * 1.6;
-                const dist = 4.2 + Math.random() * 0.3;
+                const angle = -Math.PI * 0.8 + (i / 19) * Math.PI * 1.6; // Front 290 degrees
+                const dist = 4.5 + Math.random() * 0.3;
                 bush.position.set(
                     Math.sin(angle) * dist,
                     0.15,
@@ -1461,13 +1463,13 @@
                 backgroundDecorations.push(bush);
             }
 
-            // Fence posts around the area - larger radius, curved
-            for (let i = 0; i < 20; i++) {
+            // Fence posts around play area (front half)
+            for (let i = 0; i < 24; i++) {
                 const postGeo = new THREE.BoxGeometry(0.05, 0.4, 0.05);
                 const postMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
                 const post = new THREE.Mesh(postGeo, postMat);
-                const angle = -0.2 + (i / 19) * Math.PI * 1.4;
-                const dist = 4.5;
+                const angle = -Math.PI * 0.8 + (i / 23) * Math.PI * 1.6;
+                const dist = 4.8;
                 post.position.set(
                     Math.sin(angle) * dist,
                     0.2,
@@ -1477,50 +1479,62 @@
                 backgroundDecorations.push(post);
             }
 
-            // Distant windmill - to the left
-            const windmillBase = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.15, 0.25, 1.5, 8),
-                new THREE.MeshLambertMaterial({ color: 0xDDCCBB })
-            );
-            windmillBase.position.set(-7, 0.75, -8);
-            scene.add(windmillBase);
-            backgroundDecorations.push(windmillBase);
-
-            // Windmill blades
-            const bladesGroup = new THREE.Group();
-            for (let i = 0; i < 4; i++) {
-                const blade = new THREE.Mesh(
-                    new THREE.PlaneGeometry(0.15, 0.8),
-                    new THREE.MeshBasicMaterial({ color: 0xEEEEEE, side: THREE.DoubleSide })
+            // Multiple windmills around
+            const windmillPositions = [
+                { x: -8, z: -6 }, { x: 10, z: 4 }, { x: -6, z: 8 }
+            ];
+            windmillPositions.forEach((pos, idx) => {
+                const windmillBase = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.15, 0.25, 1.5, 8),
+                    new THREE.MeshLambertMaterial({ color: 0xDDCCBB })
                 );
-                blade.rotation.z = (i / 4) * Math.PI * 2;
-                blade.position.y = 0.4;
-                blade.position.x = Math.cos(blade.rotation.z) * 0.4;
-                blade.position.y = Math.sin(blade.rotation.z) * 0.4;
-                bladesGroup.add(blade);
-            }
-            bladesGroup.position.set(-7, 1.5, -7.9);
-            bladesGroup.userData.isWindmill = true;
-            scene.add(bladesGroup);
-            backgroundDecorations.push(bladesGroup);
+                windmillBase.position.set(pos.x, 0.75, pos.z);
+                scene.add(windmillBase);
+                backgroundDecorations.push(windmillBase);
 
-            // Distant barn - to the right
-            const barnBase = new THREE.Mesh(
-                new THREE.BoxGeometry(1, 0.8, 0.6),
-                new THREE.MeshLambertMaterial({ color: 0x8B0000 })
-            );
-            barnBase.position.set(8, 0.4, -9);
-            scene.add(barnBase);
-            backgroundDecorations.push(barnBase);
+                const bladesGroup = new THREE.Group();
+                for (let i = 0; i < 4; i++) {
+                    const blade = new THREE.Mesh(
+                        new THREE.PlaneGeometry(0.15, 0.8),
+                        new THREE.MeshBasicMaterial({ color: 0xEEEEEE, side: THREE.DoubleSide })
+                    );
+                    blade.rotation.z = (i / 4) * Math.PI * 2;
+                    blade.position.x = Math.cos(blade.rotation.z) * 0.4;
+                    blade.position.y = Math.sin(blade.rotation.z) * 0.4;
+                    bladesGroup.add(blade);
+                }
+                bladesGroup.position.set(pos.x, 1.5, pos.z + 0.1);
+                bladesGroup.userData.isWindmill = true;
+                bladesGroup.userData.speed = 0.02 + idx * 0.005;
+                scene.add(bladesGroup);
+                backgroundDecorations.push(bladesGroup);
+            });
 
-            const barnRoof = new THREE.Mesh(
-                new THREE.ConeGeometry(0.6, 0.4, 4),
-                new THREE.MeshLambertMaterial({ color: 0x4a3728 })
-            );
-            barnRoof.position.set(8, 1, -9);
-            barnRoof.rotation.y = Math.PI / 4;
-            scene.add(barnRoof);
-            backgroundDecorations.push(barnRoof);
+            // Multiple barns/houses around
+            const barnPositions = [
+                { x: 9, z: -8, color: 0x8B0000 },
+                { x: -10, z: 5, color: 0x8B4513 },
+                { x: 5, z: 10, color: 0x654321 }
+            ];
+            barnPositions.forEach(pos => {
+                const barnBase = new THREE.Mesh(
+                    new THREE.BoxGeometry(1, 0.8, 0.6),
+                    new THREE.MeshLambertMaterial({ color: pos.color })
+                );
+                barnBase.position.set(pos.x, 0.4, pos.z);
+                barnBase.lookAt(0, 0.4, 0);
+                scene.add(barnBase);
+                backgroundDecorations.push(barnBase);
+
+                const barnRoof = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.6, 0.4, 4),
+                    new THREE.MeshLambertMaterial({ color: 0x4a3728 })
+                );
+                barnRoof.position.set(pos.x, 1, pos.z);
+                barnRoof.rotation.y = Math.PI / 4;
+                scene.add(barnRoof);
+                backgroundDecorations.push(barnRoof);
+            });
         }
 
         function createTree() {
@@ -1610,11 +1624,15 @@
                 b.rotation.y = Math.sin(t * b.userData.speedX * 3) * 0.5;
             });
 
-            // Animate birds
+            // Animate birds - fly in circles around player
             birds.forEach(b => {
-                b.position.x += b.userData.speed;
-                if (b.position.x > 10) b.position.x = -10;
-                b.position.y += Math.sin(time * 2 + b.userData.phase) * 0.003;
+                b.userData.phase += b.userData.speed;
+                const radius = b.userData.radius || 10;
+                b.position.x = Math.sin(b.userData.phase) * radius;
+                b.position.z = Math.cos(b.userData.phase) * radius;
+                b.position.y += Math.sin(time * 2 + b.userData.phase) * 0.002;
+                // Face direction of flight
+                b.rotation.y = b.userData.phase + Math.PI / 2;
                 if (b.userData.leftWing) {
                     const flap = Math.sin(time * 8) * 0.4;
                     b.userData.leftWing.rotation.z = flap;
@@ -2020,109 +2038,109 @@
             // No pre-created holes - they will be created dynamically
         }
 
-        // Create VR floating notification UI
+        // Create VR floating notification UI - single canvas approach
         function createVRNotificationUI() {
             vrNotificationGroup = new THREE.Group();
+            vrNotificationGroup.position.set(0, 1.6, -5.5);
             
-            // Position: behind play area, at eye level
-            vrNotificationGroup.position.set(0, 1.5, -5.5);
+            // Create a single canvas for all text
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
             
-            // Score text with its own background
-            const scoreBg = new THREE.Mesh(
-                new THREE.PlaneGeometry(1.6, 0.35),
-                new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85 })
+            // Store canvas reference for updates
+            vrNotificationGroup.userData.canvas = canvas;
+            vrNotificationGroup.userData.ctx = ctx;
+            
+            // Create texture and material
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            vrNotificationGroup.userData.texture = texture;
+            
+            const material = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            
+            // Create plane for the notification
+            const plane = new THREE.Mesh(
+                new THREE.PlaneGeometry(2, 1),
+                material
             );
-            scoreBg.position.set(0, 0.25, 0);
-            vrNotificationGroup.add(scoreBg);
+            vrNotificationGroup.add(plane);
             
-            vrScoreText = createVRText('Score: 0', 0.2);
-            vrScoreText.position.set(0, 0.25, 0.02);
-            vrNotificationGroup.add(vrScoreText);
-            
-            // Level text with its own background
-            const levelBg = new THREE.Mesh(
-                new THREE.PlaneGeometry(1.6, 0.25),
-                new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85 })
-            );
-            levelBg.position.set(0, -0.05, 0);
-            vrNotificationGroup.add(levelBg);
-            
-            vrLevelText = createVRText('Level: 1', 0.12);
-            vrLevelText.position.set(0, -0.05, 0.02);
-            vrNotificationGroup.add(vrLevelText);
-            
-            // Message text with its own background
-            const msgBg = new THREE.Mesh(
-                new THREE.PlaneGeometry(1.8, 0.3),
-                new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85 })
-            );
-            msgBg.position.set(0, -0.35, 0);
-            vrNotificationGroup.add(msgBg);
-            
-            vrMessageText = createVRText('', 0.14);
-            vrMessageText.position.set(0, -0.35, 0.02);
-            vrNotificationGroup.add(vrMessageText);
+            // Initial render
+            renderVRNotification('Score: 0', 'Level: 1', '');
             
             scene.add(vrNotificationGroup);
         }
         
-        // Create text sprite for VR
-        function createVRText(text, size = 0.1) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
+        // Render VR notification text to canvas
+        function renderVRNotification(scoreText, levelText, messageText) {
+            if (!vrNotificationGroup || !vrNotificationGroup.userData.ctx) return;
             
+            const ctx = vrNotificationGroup.userData.ctx;
+            const canvas = vrNotificationGroup.userData.canvas;
+            
+            // Clear and draw background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw border
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+            
+            // Score text
             ctx.fillStyle = '#FFD700';
             ctx.font = 'bold 48px Arial';
             ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(text, 256, 64);
+            ctx.fillText(scoreText, canvas.width / 2, 60);
             
-            const texture = new THREE.CanvasTexture(canvas);
-            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-            const sprite = new THREE.Sprite(material);
-            sprite.scale.set(size * 4, size, 1);
-            sprite.userData.text = text;
-            return sprite;
-        }
-        
-        // Update VR text content
-        function updateVRText(sprite, text, color = '#FFD700') {
-            if (!sprite) return;
-            const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
+            // Level text
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '32px Arial';
+            ctx.fillText(levelText, canvas.width / 2, 120);
             
-            ctx.fillStyle = color;
-            ctx.font = 'bold 48px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(text, 256, 64);
+            // Message text
+            if (messageText) {
+                ctx.fillStyle = '#00FF00';
+                ctx.font = 'bold 36px Arial';
+                ctx.fillText(messageText, canvas.width / 2, 200);
+            }
             
-            sprite.material.map.dispose();
-            sprite.material.map = new THREE.CanvasTexture(canvas);
-            sprite.material.needsUpdate = true;
-            sprite.userData.text = text;
+            // Update texture
+            vrNotificationGroup.userData.texture.needsUpdate = true;
         }
         
         // Update VR UI
         function updateVRUI() {
             if (!isVRMode || !vrNotificationGroup) return;
-            updateVRText(vrScoreText, `Score: ${score}`);
-            updateVRText(vrLevelText, `Level: ${level} | Combo: ${combo}x`);
+            renderVRNotification(
+                `Score: ${score}`,
+                `Level: ${level} | Combo: ${combo}x`,
+                ''
+            );
         }
         
         // Show VR message (level complete, etc)
         function showVRMessage(message, duration = 3000) {
-            if (!isVRMode || !vrMessageText) return;
-            updateVRText(vrMessageText, message, '#00FF00');
+            if (!isVRMode || !vrNotificationGroup) return;
+            renderVRNotification(
+                `Score: ${score}`,
+                `Level: ${level}`,
+                message
+            );
             if (duration > 0) {
-                setTimeout(() => updateVRText(vrMessageText, ''), duration);
+                setTimeout(() => {
+                    renderVRNotification(`Score: ${score}`, `Level: ${level} | Combo: ${combo}x`, '');
+                }, duration);
             }
         }
-
+        
+        // Create text sprite for VR
         // Create score display sign (for 2D mode only)
         function createScoreSign() {
             const signGroup = new THREE.Group();
@@ -3031,14 +3049,14 @@
         function createLevelCompleteUI() {
             // In VR mode, use floating 3D text instead of HTML overlay
             if (isVRMode) {
-                const msg = level >= 4 
+                const msg = level >= 8 
                     ? `🎉 ALL LEVELS COMPLETE! Score: ${score}` 
                     : `Level ${level} Complete! Score: ${score}`;
                 showVRMessage(msg, 0); // 0 = don't auto-hide
                 
                 // Auto-advance after delay in VR
                 setTimeout(() => {
-                    if (level >= 4) {
+                    if (level >= 8) {
                         startGame();
                     } else {
                         startNextLevel();
@@ -3097,7 +3115,7 @@
             }
 
             // If this is the final level, add a congratulations message
-            if (level >= 4) {
+            if (level >= 8) {
                 const congratsMessage = document.createElement('h3');
                 congratsMessage.textContent = 'Congratulations! You completed all levels!';
                 congratsMessage.style.color = '#FFD700';
@@ -3111,7 +3129,7 @@
 
             const nextButton = document.createElement('button');
 
-            if (level >= 4) {
+            if (level >= 8) {
                 // This is the final level completion
                 nextButton.textContent = 'Restart Game';
                 nextButton.addEventListener('click', () => {
@@ -4231,10 +4249,10 @@
         function startPowerUpSpawning() {
             if (powerUpSpawnTimer) clearInterval(powerUpSpawnTimer);
             powerUpSpawnTimer = setInterval(() => {
-                if (gameActive && !gamePaused && Math.random() < 0.3) {
+                if (gameActive && !gamePaused && Math.random() < 0.5) { // 50% chance, more frequent
                     spawnPowerUp();
                 }
-            }, 8000);
+            }, 5000); // Every 5 seconds instead of 8
         }
 
         function spawnPowerUp() {
@@ -4244,11 +4262,19 @@
             // Check if position is occupied
             if (activeMoles.some(m => m.position.x === position.x && m.position.z === position.z)) return;
             
-            const geometry = new THREE.OctahedronGeometry(0.1, 0);
-            const material = new THREE.MeshBasicMaterial({ color: type.color, transparent: true, opacity: 0.8 });
+            // Larger, more visible power-up
+            const geometry = new THREE.OctahedronGeometry(0.2, 0); // Bigger
+            const material = new THREE.MeshBasicMaterial({ color: type.color, transparent: false }); // Solid, not transparent
             const powerUp = new THREE.Mesh(geometry, material);
             
-            powerUp.position.set(position.x, 0.3, position.z);
+            // Add glow ring around power-up
+            const ringGeo = new THREE.TorusGeometry(0.25, 0.03, 8, 16);
+            const ringMat = new THREE.MeshBasicMaterial({ color: type.color });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            powerUp.add(ring);
+            
+            powerUp.position.set(position.x, 0.5, position.z); // Higher off ground
             powerUp.userData = { isPowerUp: true, type: type.type, duration: type.duration, spawnTime: Date.now() };
             
             scene.add(powerUp);
@@ -4376,7 +4402,7 @@
                         createDemonBoss(bossGroup, bossType.color);
                 }
                 
-                bossGroup.position.set(position.x, -0.3, position.z);
+                bossGroup.position.set(position.x, 0, position.z);
                 bossGroup.userData = {
                     isMole: true,
                     isBoss: true,
@@ -4390,10 +4416,14 @@
                 currentBoss = bossGroup;
                 moleGroup.add(bossGroup);
                 
-                // Animate boss rising
+                // Animate boss rising - target 0.4 so fully visible
                 const startY = bossGroup.position.y;
-                const targetY = 0;
+                const targetY = 0.4;
                 const startTime = Date.now();
+                
+                // Create dirt burst for boss
+                createDirtBurst(new THREE.Vector3(position.x, 0, position.z));
+                
                 function animateBossUp() {
                     const progress = Math.min((Date.now() - startTime) / 500, 1);
                     bossGroup.position.y = startY + (targetY - startY) * progress;
@@ -4710,7 +4740,7 @@
         function startChaosEventTimer() {
             if (chaosEventTimer) clearInterval(chaosEventTimer);
             chaosEventTimer = setInterval(() => {
-                if (gameActive && !gamePaused && !activeChaosEvent && Math.random() < 0.4) {
+                if (gameActive && !gamePaused && !activeChaosEvent && Math.random() < 0.6) { // 60% chance
                     triggerChaosEvent();
                 }
             }, CHAOS_SPAWN_INTERVAL);
