@@ -193,11 +193,11 @@
         
         function generateHolePositions() {
             holePositions = [];
-            // Create 15 randomized positions - 50% larger area, further in front
+            // Create 15 randomized positions - play area starts 2m in front of player
             for (let i = 0; i < 15; i++) {
                 holePositions.push({
-                    x: (Math.random() - 0.5) * 3.6,  // -1.8 to 1.8 (50% wider)
-                    z: -1.0 - Math.random() * 2.7    // -1.0 to -3.7 (further forward, 50% longer)
+                    x: (Math.random() - 0.5) * 3.6,  // -1.8 to 1.8 (wide)
+                    z: -2.0 - Math.random() * 2.7    // -2.0 to -4.7 (far in front, 1m further)
                 });
             }
         }
@@ -1330,11 +1330,17 @@
 
         // === BACKGROUND DECORATIONS ===
         function createBackgroundDecorations() {
-            // Trees around the play area
-            for (let i = 0; i < 6; i++) {
+            // Trees around the play area - larger radius, curved around player
+            for (let i = 0; i < 8; i++) {
                 const tree = createTree();
-                const angle = (i / 6) * Math.PI * 2;
-                tree.position.set(Math.cos(angle) * 3.5, 0, Math.sin(angle) * 3.5);
+                // Semi-circle in front of player (not behind)
+                const angle = -Math.PI * 0.15 + (i / 7) * Math.PI * 1.3; // -27° to +207°
+                const radius = 5 + Math.random() * 1;
+                tree.position.set(
+                    Math.sin(angle) * radius,
+                    0,
+                    -3.35 + Math.cos(angle) * radius // Centered on play area
+                );
                 tree.scale.setScalar(0.8 + Math.random() * 0.4);
                 scene.add(tree);
                 trees.push(tree);
@@ -1345,9 +1351,9 @@
                 const butterfly = createButterfly();
                 const angle = (i / 4) * Math.PI * 2;
                 butterfly.position.set(
-                    Math.cos(angle) * 3 + (Math.random() - 0.5),
+                    Math.cos(angle) * 4 + (Math.random() - 0.5),
                     1.5 + Math.random() * 1.5,
-                    Math.sin(angle) * 3 + (Math.random() - 0.5)
+                    -3.35 + Math.sin(angle) * 4 + (Math.random() - 0.5)
                 );
                 butterfly.userData = { 
                     phase: Math.random() * Math.PI * 2, 
@@ -1360,10 +1366,15 @@
                 butterflies.push(butterfly);
             }
 
-            // Flying birds in far background
+            // Flying birds in far background - curved around
             for (let i = 0; i < 4; i++) {
                 const bird = createBird();
-                bird.position.set(-8 + Math.random() * 2, 4 + Math.random() * 3, -8 - Math.random() * 4);
+                const angle = -0.5 + (i / 3) * Math.PI;
+                bird.position.set(
+                    Math.sin(angle) * 12,
+                    4 + Math.random() * 3,
+                    -6 + Math.cos(angle) * 8
+                );
                 bird.userData = { speed: 0.015 + Math.random() * 0.01, phase: Math.random() * Math.PI * 2 };
                 scene.add(bird);
                 birds.push(bird);
@@ -1374,81 +1385,104 @@
         }
 
         function create2DBackground() {
-            // 3D Mountains using cones
+            // 3D Mountains curved around player in a semi-circle
             const mountainColors = [0x4a6741, 0x5a7751, 0x3a5731];
-            for (let i = 0; i < 7; i++) {
-                const height = 2 + Math.random() * 2;
+            for (let i = 0; i < 9; i++) {
+                const height = 2 + Math.random() * 2.5;
                 const radius = 1.5 + Math.random();
                 const mountainGeo = new THREE.ConeGeometry(radius, height, 6);
                 const mountainMat = new THREE.MeshLambertMaterial({ color: mountainColors[i % 3] });
                 const mountain = new THREE.Mesh(mountainGeo, mountainMat);
-                mountain.position.set(-9 + i * 3, height / 2 - 0.5, -10 - Math.random() * 2);
+                // Curve around player in semi-circle
+                const angle = -0.6 + (i / 8) * Math.PI * 1.2;
+                const dist = 12 + Math.random() * 3;
+                mountain.position.set(
+                    Math.sin(angle) * dist,
+                    height / 2 - 0.5,
+                    -3.35 + Math.cos(angle) * dist
+                );
                 scene.add(mountain);
                 backgroundDecorations.push(mountain);
             }
 
-            // Rolling hills (closer, greener)
-            for (let i = 0; i < 8; i++) {
-                const hillGeo = new THREE.CircleGeometry(1.5, 16, 0, Math.PI);
-                const hillMat = new THREE.MeshBasicMaterial({ color: 0x4a8f4a, side: THREE.DoubleSide });
+            // Rolling hills curved around
+            for (let i = 0; i < 10; i++) {
+                const hillGeo = new THREE.SphereGeometry(1.2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+                const hillMat = new THREE.MeshLambertMaterial({ color: 0x4a8f4a });
                 const hill = new THREE.Mesh(hillGeo, hillMat);
-                hill.position.set(-8 + i * 2.5, 0, -6 - Math.random());
-                hill.rotation.x = -Math.PI / 2 + 0.3;
-                hill.scale.set(1 + Math.random() * 0.5, 0.5 + Math.random() * 0.3, 1);
+                const angle = -0.4 + (i / 9) * Math.PI * 0.8;
+                const dist = 7 + Math.random() * 2;
+                hill.position.set(
+                    Math.sin(angle) * dist,
+                    0,
+                    -3.35 + Math.cos(angle) * dist
+                );
+                hill.scale.set(1 + Math.random() * 0.5, 0.3 + Math.random() * 0.2, 1 + Math.random() * 0.5);
                 scene.add(hill);
                 backgroundDecorations.push(hill);
             }
 
-            // Sun
+            // Sun - off to the side
             const sunGeo = new THREE.CircleGeometry(0.8, 32);
             const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFDD44 });
             const sun = new THREE.Mesh(sunGeo, sunMat);
-            sun.position.set(5, 6, -12);
+            sun.position.set(8, 6, -10);
+            sun.lookAt(0, 1.6, 0); // Face player
             scene.add(sun);
             backgroundDecorations.push(sun);
 
             // Sun rays
             for (let i = 0; i < 8; i++) {
                 const rayGeo = new THREE.PlaneGeometry(0.1, 1.5);
-                const rayMat = new THREE.MeshBasicMaterial({ color: 0xFFEE88, transparent: true, opacity: 0.5 });
+                const rayMat = new THREE.MeshBasicMaterial({ color: 0xFFEE88, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
                 const ray = new THREE.Mesh(rayGeo, rayMat);
-                ray.position.set(5, 6, -12.1);
+                ray.position.copy(sun.position);
                 ray.rotation.z = (i / 8) * Math.PI * 2;
                 ray.position.x += Math.cos(ray.rotation.z) * 1.2;
                 ray.position.y += Math.sin(ray.rotation.z) * 1.2;
+                ray.lookAt(0, 1.6, 0);
                 scene.add(ray);
                 backgroundDecorations.push(ray);
             }
 
-            // Background bushes around play area
-            for (let i = 0; i < 12; i++) {
-                const bushGeo = new THREE.CircleGeometry(0.3 + Math.random() * 0.2, 8);
-                const bushMat = new THREE.MeshBasicMaterial({ color: [0x2d5a2d, 0x3d6a3d, 0x4d7a4d][i % 3] });
+            // Background bushes around play area - larger radius
+            for (let i = 0; i < 16; i++) {
+                const bushGeo = new THREE.SphereGeometry(0.25 + Math.random() * 0.15, 8, 6);
+                const bushMat = new THREE.MeshLambertMaterial({ color: [0x2d5a2d, 0x3d6a3d, 0x4d7a4d][i % 3] });
                 const bush = new THREE.Mesh(bushGeo, bushMat);
-                const angle = (i / 12) * Math.PI * 2;
-                bush.position.set(Math.cos(angle) * 2.8, 0.15, Math.sin(angle) * 2.8);
-                bush.rotation.x = -Math.PI / 3;
+                const angle = -0.3 + (i / 15) * Math.PI * 1.6;
+                const dist = 4.2 + Math.random() * 0.3;
+                bush.position.set(
+                    Math.sin(angle) * dist,
+                    0.15,
+                    -3.35 + Math.cos(angle) * dist
+                );
                 scene.add(bush);
                 backgroundDecorations.push(bush);
             }
 
-            // Fence posts around the area
-            for (let i = 0; i < 16; i++) {
+            // Fence posts around the area - larger radius, curved
+            for (let i = 0; i < 20; i++) {
                 const postGeo = new THREE.BoxGeometry(0.05, 0.4, 0.05);
                 const postMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
                 const post = new THREE.Mesh(postGeo, postMat);
-                const angle = (i / 16) * Math.PI * 2;
-                post.position.set(Math.cos(angle) * 2.5, 0.2, Math.sin(angle) * 2.5);
+                const angle = -0.2 + (i / 19) * Math.PI * 1.4;
+                const dist = 4.5;
+                post.position.set(
+                    Math.sin(angle) * dist,
+                    0.2,
+                    -3.35 + Math.cos(angle) * dist
+                );
                 scene.add(post);
                 backgroundDecorations.push(post);
             }
 
-            // Distant windmill
+            // Distant windmill - to the left
             const windmillBase = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.15, 0.25, 1.5, 8),
-                new THREE.MeshBasicMaterial({ color: 0xDDCCBB })
+                new THREE.MeshLambertMaterial({ color: 0xDDCCBB })
             );
-            windmillBase.position.set(-5, 0.75, -7);
+            windmillBase.position.set(-7, 0.75, -8);
             scene.add(windmillBase);
             backgroundDecorations.push(windmillBase);
 
@@ -1465,25 +1499,25 @@
                 blade.position.y = Math.sin(blade.rotation.z) * 0.4;
                 bladesGroup.add(blade);
             }
-            bladesGroup.position.set(-5, 1.5, -6.9);
+            bladesGroup.position.set(-7, 1.5, -7.9);
             bladesGroup.userData.isWindmill = true;
             scene.add(bladesGroup);
             backgroundDecorations.push(bladesGroup);
 
-            // Distant barn
+            // Distant barn - to the right
             const barnBase = new THREE.Mesh(
                 new THREE.BoxGeometry(1, 0.8, 0.6),
-                new THREE.MeshBasicMaterial({ color: 0x8B0000 })
+                new THREE.MeshLambertMaterial({ color: 0x8B0000 })
             );
-            barnBase.position.set(6, 0.4, -8);
+            barnBase.position.set(8, 0.4, -9);
             scene.add(barnBase);
             backgroundDecorations.push(barnBase);
 
             const barnRoof = new THREE.Mesh(
                 new THREE.ConeGeometry(0.6, 0.4, 4),
-                new THREE.MeshBasicMaterial({ color: 0x4a3728 })
+                new THREE.MeshLambertMaterial({ color: 0x4a3728 })
             );
-            barnRoof.position.set(6, 1, -8);
+            barnRoof.position.set(8, 1, -9);
             barnRoof.rotation.y = Math.PI / 4;
             scene.add(barnRoof);
             backgroundDecorations.push(barnRoof);
@@ -1971,7 +2005,7 @@
 
         // Create floor with dirt texture
         function createFloor() {
-            // Create a simple brown floor to represent dirt - 50% larger
+            // Create a simple brown floor to represent dirt
             const floorGeometry = new THREE.PlaneGeometry(7.5, 7.5);
             const floorMaterial = new THREE.MeshBasicMaterial({
                 color: 0x6B3D14, // Darker brown for dirt
@@ -1980,7 +2014,7 @@
             const floor = new THREE.Mesh(floorGeometry, floorMaterial);
             floor.rotation.x = -Math.PI / 2;
             floor.position.y = 0; // Ground level for VR
-            floor.position.z = -2.35; // Center of play area
+            floor.position.z = -3.35; // Center of play area (moved 1m forward)
             floorGroup.add(floor);
 
             // No pre-created holes - they will be created dynamically
@@ -1991,32 +2025,42 @@
             vrNotificationGroup = new THREE.Group();
             
             // Position: behind play area, at eye level
-            vrNotificationGroup.position.set(0, 1.4, -4.5);
+            vrNotificationGroup.position.set(0, 1.5, -5.5);
             
-            // Background panel
-            const panelGeo = new THREE.PlaneGeometry(1.8, 0.8);
-            const panelMat = new THREE.MeshBasicMaterial({ 
-                color: 0x000000, 
-                transparent: true, 
-                opacity: 0.8,
-                side: THREE.DoubleSide
-            });
-            const panel = new THREE.Mesh(panelGeo, panelMat);
-            vrNotificationGroup.add(panel);
+            // Score text with its own background
+            const scoreBg = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.6, 0.35),
+                new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85 })
+            );
+            scoreBg.position.set(0, 0.25, 0);
+            vrNotificationGroup.add(scoreBg);
             
-            // Score text - larger z-offset to prevent z-fighting
-            vrScoreText = createVRText('Score: 0', 0.18);
-            vrScoreText.position.set(0, 0.2, 0.05);
+            vrScoreText = createVRText('Score: 0', 0.2);
+            vrScoreText.position.set(0, 0.25, 0.02);
             vrNotificationGroup.add(vrScoreText);
             
-            // Level text
+            // Level text with its own background
+            const levelBg = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.6, 0.25),
+                new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85 })
+            );
+            levelBg.position.set(0, -0.05, 0);
+            vrNotificationGroup.add(levelBg);
+            
             vrLevelText = createVRText('Level: 1', 0.12);
-            vrLevelText.position.set(0, -0.05, 0.05);
+            vrLevelText.position.set(0, -0.05, 0.02);
             vrNotificationGroup.add(vrLevelText);
             
-            // Message text (for level complete, etc)
+            // Message text with its own background
+            const msgBg = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.8, 0.3),
+                new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85 })
+            );
+            msgBg.position.set(0, -0.35, 0);
+            vrNotificationGroup.add(msgBg);
+            
             vrMessageText = createVRText('', 0.14);
-            vrMessageText.position.set(0, -0.25, 0.05);
+            vrMessageText.position.set(0, -0.35, 0.02);
             vrNotificationGroup.add(vrMessageText);
             
             scene.add(vrNotificationGroup);
@@ -2523,8 +2567,8 @@
             mouth.position.set(0, 0.14, 0.11);
             creatureGroup.add(mouth);
 
-            // Set position
-            creatureGroup.position.set(position.x, -0.15, position.z); // Start just below ground (floor at y=0)
+            // Set position - start at ground level, will animate up
+            creatureGroup.position.set(position.x, 0, position.z);
 
             // Calculate animation speed variation by creature type
             // Each creature has its own base speed characteristics and random variation
@@ -2741,7 +2785,7 @@
         // Animate mole coming up with varied animation speed by creature type
         function animateMoleUp(mole) {
             const startY = mole.position.y;
-            const targetY = 0.15; // Pop up well above floor so full body visible
+            const targetY = 0.25; // Pop up well above floor so fully visible in VR
 
             // Spawn dirt burst effect
             createDirtBurst(mole.position.clone());
@@ -4305,10 +4349,10 @@
                 if (gamePaused) return;
                 
                 const bossType = bossTypes[bossesDefeatedThisGame % bossTypes.length];
-                // Randomize boss position in play area
+                // Randomize boss position in play area (moved forward)
                 const position = { 
                     x: (Math.random() - 0.5) * 2.5,  // Random X in field
-                    z: -1.5 - Math.random() * 1.5    // Random Z in front of player
+                    z: -2.5 - Math.random() * 1.5    // -2.5 to -4.0 (in front of player)
                 };
                 const bossGroup = new THREE.Group();
                 
