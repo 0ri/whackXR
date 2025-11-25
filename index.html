@@ -211,6 +211,7 @@
         let molesPerLevel = 3;
         let activeMoles = [];
         let activeHoles = [];
+        let spawnTimer = null; // Track spawn timer to cancel it
         let gameActive = false;
         let gamePaused = false;
 
@@ -1115,6 +1116,16 @@
         // === CREATURE BEHAVIORS ===
         function updateCreatureBehaviors() {
             const time = Date.now();
+            
+            // Animate boss if present
+            if (currentBoss && currentBoss.userData.active) {
+                // Boss bobbing and rotation
+                currentBoss.position.y = 0.4 + Math.sin(time * 0.003) * 0.05;
+                currentBoss.rotation.y = Math.sin(time * 0.002) * 0.3;
+                // Slight scale pulse
+                const pulse = 1 + Math.sin(time * 0.005) * 0.03;
+                currentBoss.scale.set(pulse, pulse, pulse);
+            }
             
             activeMoles.forEach(mole => {
                 if (!mole.userData.active) return;
@@ -2854,26 +2865,26 @@
             const dirtColors = [0x8B4513, 0x654321, 0x5C4033, 0x6B4423];
             for (let i = 0; i < 8; i++) {
                 const dirt = new THREE.Mesh(
-                    new THREE.BoxGeometry(0.03, 0.03, 0.03),
+                    new THREE.BoxGeometry(0.04, 0.04, 0.04),
                     new THREE.MeshBasicMaterial({ color: dirtColors[Math.floor(Math.random() * dirtColors.length)] })
                 );
                 dirt.position.copy(position);
-                dirt.position.y = 0.05;
+                dirt.position.y = 0.15; // Higher start position for VR visibility
                 const angle = (i / 8) * Math.PI * 2;
-                const speed = 0.03 + Math.random() * 0.02;
+                const speed = 0.04 + Math.random() * 0.03;
                 dirt.userData = {
-                    velocity: new THREE.Vector3(Math.cos(angle) * speed, 0.08 + Math.random() * 0.04, Math.sin(angle) * speed),
-                    life: 0.6
+                    velocity: new THREE.Vector3(Math.cos(angle) * speed, 0.12 + Math.random() * 0.06, Math.sin(angle) * speed),
+                    life: 30 // Frame count instead of decimal
                 };
                 scene.add(dirt);
                 
-                // Animate dirt
+                // Animate dirt with proper cleanup
                 function animateDirt() {
-                    dirt.userData.velocity.y -= 0.004;
+                    dirt.userData.velocity.y -= 0.006;
                     dirt.position.add(dirt.userData.velocity);
                     dirt.rotation.x += 0.2;
                     dirt.rotation.y += 0.15;
-                    dirt.userData.life -= 0.02;
+                    dirt.userData.life--;
                     
                     if (dirt.userData.life > 0 && dirt.position.y > 0) {
                         requestAnimationFrame(animateDirt);
@@ -3188,6 +3199,12 @@
                 levelCompleteUI = null;
             }
             
+            // Cancel any pending spawn timers
+            if (spawnTimer) {
+                clearTimeout(spawnTimer);
+                spawnTimer = null;
+            }
+            
             score = 0;
             levelScore = 0;
             level = 1;
@@ -3247,6 +3264,12 @@
             if (levelCompleteUI) {
                 document.body.removeChild(levelCompleteUI);
                 levelCompleteUI = null;
+            }
+            
+            // Cancel any pending spawn timers
+            if (spawnTimer) {
+                clearTimeout(spawnTimer);
+                spawnTimer = null;
             }
 
             // Increment level
@@ -3315,13 +3338,16 @@
 
         // Spawn multiple moles based on current level
         function spawnMoles() {
-            if (!gameActive || levelEnding) return;
+            if (!gameActive || levelEnding || gamePaused) {
+                spawnTimer = null;
+                return;
+            }
 
             // Limit total active moles to prevent bunching
             const maxActiveMoles = 4 + level; // 5 at level 1, up to 12 at level 8
             if (activeMoles.length >= maxActiveMoles) {
                 // Too many moles, wait and try again
-                setTimeout(spawnMoles, 500);
+                spawnTimer = setTimeout(spawnMoles, 500);
                 return;
             }
 
@@ -3330,13 +3356,13 @@
 
             for (let i = 0; i < numMolesToSpawn; i++) {
                 setTimeout(() => {
-                    if (!levelEnding && activeMoles.length < maxActiveMoles) spawnMole();
+                    if (gameActive && !levelEnding && activeMoles.length < maxActiveMoles) spawnMole();
                 }, i * 600); // Stagger spawns more (was 500)
             }
 
             // Schedule next wave - longer interval to prevent bunching
             const spawnInterval = Math.max(1500, 3000 - (level - 1) * 150); // 3000ms down to 1500ms
-            setTimeout(spawnMoles, spawnInterval);
+            spawnTimer = setTimeout(spawnMoles, spawnInterval);
         }
 
         // Handle controller select event (shooting)
@@ -3407,11 +3433,11 @@
 
         // Create explosion particles at a position
         function createExplosion(position) {
-            const numParticles = 20;
+            const numParticles = 15; // Reduced from 20
             const particles = new THREE.Group();
 
             // Create particle geometries and materials
-            const particleGeometry = new THREE.SphereGeometry(0.03, 8, 8);
+            const particleGeometry = new THREE.SphereGeometry(0.03, 6, 6);
 
             // Different colors for particles
             const colors = [
@@ -3444,7 +3470,7 @@
                 particle.userData = {
                     direction: direction,
                     life: 1.0,
-                    decay: 0.02 + Math.random() * 0.03  // Random decay rate
+                    decay: 0.04 + Math.random() * 0.04  // Faster decay
                 };
 
                 particles.add(particle);
@@ -3452,12 +3478,17 @@
 
             particlesGroup.add(particles);
 
-            // Remove particles after a certain time
+            // Force remove particles after 1 second
             setTimeout(() => {
-                if (particlesGroup.children.includes(particles)) {
+                if (particlesGroup && particlesGroup.children.includes(particles)) {
+                    // Dispose all particle materials and geometries
+                    particles.children.forEach(p => {
+                        if (p.geometry) p.geometry.dispose();
+                        if (p.material) p.material.dispose();
+                    });
                     particlesGroup.remove(particles);
                 }
-            }, 2000);
+            }, 1000);
 
             return particles;
         }
@@ -4626,7 +4657,38 @@
             }, 1500);
         }
 
+        let vrBossHealthBar = null; // 3D health bar for VR
+
         function createBossHealthBar(bossName = 'BOSS') {
+            // VR mode: create 3D health bar above boss
+            if (isVRMode && currentBoss) {
+                // Create 3D health bar group
+                vrBossHealthBar = new THREE.Group();
+                
+                // Background bar
+                const bgGeo = new THREE.PlaneGeometry(0.6, 0.08);
+                const bgMat = new THREE.MeshBasicMaterial({ color: 0x333333, side: THREE.DoubleSide });
+                const bg = new THREE.Mesh(bgGeo, bgMat);
+                vrBossHealthBar.add(bg);
+                
+                // Health fill bar
+                const fillGeo = new THREE.PlaneGeometry(0.58, 0.06);
+                const fillMat = new THREE.MeshBasicMaterial({ color: 0xFF0000, side: THREE.DoubleSide });
+                const fill = new THREE.Mesh(fillGeo, fillMat);
+                fill.position.z = 0.01;
+                fill.name = 'healthFill';
+                vrBossHealthBar.add(fill);
+                
+                // Position above boss
+                vrBossHealthBar.position.set(0, 0.8, 0);
+                currentBoss.add(vrBossHealthBar);
+                
+                // Also show message
+                showVRMessage(`👹 ${bossName} appeared!`, 2000);
+                return;
+            }
+            
+            // Desktop mode: HTML health bar
             if (bossHealthBar) document.body.removeChild(bossHealthBar);
             
             bossHealthBar = document.createElement('div');
@@ -4651,7 +4713,17 @@
         function hitBoss(boss) {
             boss.userData.health--;
             
-            // Update health bar
+            // Update VR health bar
+            if (isVRMode && vrBossHealthBar) {
+                const fill = vrBossHealthBar.getObjectByName('healthFill');
+                if (fill) {
+                    const healthPercent = boss.userData.health / boss.userData.maxHealth;
+                    fill.scale.x = Math.max(0.01, healthPercent);
+                    fill.position.x = -0.29 * (1 - healthPercent); // Shift left as it shrinks
+                }
+            }
+            
+            // Update HTML health bar (desktop)
             const fill = document.getElementById('bossHealthFill');
             if (fill) {
                 fill.style.width = `${(boss.userData.health / boss.userData.maxHealth) * 100}%`;
@@ -4710,8 +4782,9 @@
             // Remove boss
             moleGroup.remove(boss);
             currentBoss = null;
+            vrBossHealthBar = null; // VR health bar is removed with boss
             
-            // Remove health bar
+            // Remove HTML health bar
             if (bossHealthBar) {
                 document.body.removeChild(bossHealthBar);
                 bossHealthBar = null;
