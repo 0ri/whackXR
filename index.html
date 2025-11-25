@@ -1872,12 +1872,12 @@
                 // Handle session end
                 session.addEventListener('end', onSessionEnd);
 
-                // Add lighting for AR mode
+                // Add lighting for AR mode - BRIGHTER
                 debugPrint('Adding lights...');
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
                 scene.add(ambientLight);
 
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
                 directionalLight.position.set(0, 10, 5);
                 scene.add(directionalLight);
 
@@ -1886,9 +1886,24 @@
                 initPhase4Particles();
                 initPhase5UI();
 
-                // Create scene content
+                // Create scene content - position in front of user
                 debugPrint('Creating floor...');
                 createFloor();
+                
+                // Move floor group to be in front of user (0, 0, -1.5 means 1.5m in front)
+                floorGroup.position.set(0, 0, -1.5);
+                moleGroup.position.set(0, 0, -1.5);
+                debugPrint('Floor & moles positioned at 0, 0, -1.5');
+                
+                // Add a bright debug marker so we can see where content is
+                const marker = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.3, 0.3, 0.3),
+                    new THREE.MeshBasicMaterial({ color: 0xFF0000 })
+                );
+                marker.position.set(0, 0.15, -1.5);
+                scene.add(marker);
+                debugPrint('Red debug cube added at 0, 0.15, -1.5');
+                
                 debugPrint('Creating score sign...');
                 createScoreSign();
 
@@ -1896,6 +1911,8 @@
                 debugPrint('Starting game...');
                 startGame();
                 debugPrint('Game started! Active moles should spawn soon.');
+                debugPrint('floorGroup children: ' + floorGroup.children.length);
+                debugPrint('moleGroup children: ' + moleGroup.children.length);
 
                 // Hide UI elements in AR mode
                 document.getElementById('startAR').classList.add('hidden');
