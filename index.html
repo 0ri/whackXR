@@ -1880,6 +1880,19 @@
                 const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
                 directionalLight.position.set(0, 10, 5);
                 scene.add(directionalLight);
+                
+                // TEST: Add cubes directly to scene to verify rendering
+                debugPrint('Adding test cubes directly to scene...');
+                for (let i = 0; i < 5; i++) {
+                    const testCube = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.2, 0.2, 0.2),
+                        new THREE.MeshBasicMaterial({ color: [0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF][i] })
+                    );
+                    testCube.position.set(-0.5 + i * 0.25, 0.1, -1);
+                    scene.add(testCube);
+                }
+                debugPrint('5 test cubes added at z=-1');
+                debugPrint('scene.children.length=' + scene.children.length);
 
                 // Initialize AR-compatible visual effects (particles and UI only)
                 debugPrint('Initializing particles...');
@@ -2550,23 +2563,35 @@
 
             // Create a hole
             const hole = createHole(position);
+            debugPrint('Hole created');
 
             // Wait for the hole to appear before creating the mole
             setTimeout(() => {
-                // Create and add mole
-                const mole = createMole(position, hole);
-                activeMoles.push(mole);
-                moleGroup.add(mole);
-
-                // Animate mole coming up
-                animateMoleUp(mole);
-
-                // Schedule mole to go back down
-                setTimeout(() => {
-                    if (mole.userData.active) {
-                        animateMoleDown(mole);
+                try {
+                    // Create and add mole
+                    debugPrint('Creating mole...');
+                    const mole = createMole(position, hole);
+                    if (!mole) {
+                        debugPrint('ERROR: createMole returned null/undefined');
+                        return;
                     }
-                }, mole.userData.duration);
+                    debugPrint('Mole created, adding to group...');
+                    activeMoles.push(mole);
+                    moleGroup.add(mole);
+                    debugPrint('Mole added! moleGroup.children.length=' + moleGroup.children.length);
+
+                    // Animate mole coming up
+                    animateMoleUp(mole);
+
+                    // Schedule mole to go back down
+                    setTimeout(() => {
+                        if (mole.userData.active) {
+                            animateMoleDown(mole);
+                        }
+                    }, mole.userData.duration);
+                } catch (e) {
+                    debugPrint('ERROR in mole spawn: ' + e.message);
+                }
             }, 250); // Wait for hole to appear
         }
 
