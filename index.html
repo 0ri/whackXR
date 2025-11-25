@@ -101,7 +101,6 @@
         let scene, camera, renderer;
         let gameContainer;
         let scoreDisplay, timerDisplay;
-        let arSession = null;
         let controller, controllerGrip;
         let raycaster, tempMatrix;
         let floorGroup, moleGroup, scoreSign, particlesGroup;
@@ -1733,91 +1732,69 @@
 
         // Check if WebXR AR is supported
         function checkXRSupport() {
-            if ('xr' in navigator) {
-                navigator.xr.isSessionSupported('immersive-ar')
-                    .then((supported) => {
-                        if (supported) {
-                            document.getElementById('startAR').classList.remove('hidden');
-                            document.getElementById('startAR').addEventListener('click', startAR);
-                        } else {
-                            showFallbackButton();
-                        }
-                    })
-                    .catch(err => {
-                        showFallbackButton();
-                    });
-            } else {
-                showFallbackButton();
-            }
+            // Show game mode menu directly in browser
+            showGameModeMenuHTML();
         }
         
-        function showFallbackButton() {
-            const btn = document.createElement('button');
-            btn.textContent = '🎮 Start Game';
-            btn.style.cssText = `
-                position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-                padding: 20px 40px; font-size: 24px; background: #4CAF50; color: white;
-                border: none; border-radius: 10px; cursor: pointer; z-index: 100;
+        // Show game mode menu in HTML (before 3D scene is created)
+        function showGameModeMenuHTML() {
+            const menu = document.createElement('div');
+            menu.id = 'startMenu';
+            menu.style.cssText = `
+                position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: rgba(0,0,0,0.95); color: white; padding: 30px;
+                border-radius: 15px; font-family: Arial; text-align: center; z-index: 200;
+                max-width: 500px;
             `;
-            btn.onclick = () => {
-                btn.remove();
-                startFallbackMode();
-            };
-            document.body.appendChild(btn);
-        }
-
-        // Show message when WebXR is not supported
-        function showWebXRNotSupportedMessage(message) {
-            const warning = document.createElement('div');
-            warning.style.position = 'absolute';
-            warning.style.left = '50%';
-            warning.style.top = '50%';
-            warning.style.transform = 'translate(-50%, -50%)';
-            warning.style.textAlign = 'center';
-            warning.style.backgroundColor = 'rgba(0,0,0,0.7)';
-            warning.style.color = 'white';
-            warning.style.padding = '20px';
-            warning.style.borderRadius = '5px';
-            warning.style.zIndex = '100';
-            warning.innerHTML = message + '<br><br>Try on a WebXR-compatible device/browser.<br>For desktop: <button id="fallbackModeBtn" style="margin-top: 10px; padding: 10px 20px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Test in Fallback Mode</button>';
-            document.body.appendChild(warning);
-
-            document.getElementById('fallbackModeBtn').addEventListener('click', startFallbackMode);
-        }
-
-        // Start AR session
-        function startAR() {
-            debugPrint('startAR() called');
-            // Initialize audio context on user interaction
-            initAudioContext();
-
-            debugPrint('Requesting AR session...');
-            navigator.xr.requestSession('immersive-ar', {
-                requiredFeatures: ['local-floor'],
-                optionalFeatures: ['hit-test']
-            }).then(onSessionStarted).catch(err => {
-                debugPrint('AR session error: ' + err.message);
-                console.error('Error starting AR session:', err);
-                showWebXRNotSupportedMessage('Error starting AR: ' + err.message);
+            menu.innerHTML = `
+                <h1 style="color:#FFD700;margin-top:0">🎮 WHACK-A-MOLE</h1>
+                <p style="color:#888;margin-bottom:20px">Select a game mode to start</p>
+                
+                <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px">
+                    <button class="modeBtn" data-mode="endless" style="width:140px;padding:15px;font-size:14px;cursor:pointer;background:#4CAF50;border:none;color:white;border-radius:8px">
+                        ♾️ Endless<br><small>Classic mode</small>
+                    </button>
+                    <button class="modeBtn" data-mode="timed" style="width:140px;padding:15px;font-size:14px;cursor:pointer;background:#2196F3;border:none;color:white;border-radius:8px">
+                        ⏱️ Time Attack<br><small>60 seconds</small>
+                    </button>
+                    <button class="modeBtn" data-mode="survival" style="width:140px;padding:15px;font-size:14px;cursor:pointer;background:#f44336;border:none;color:white;border-radius:8px">
+                        ❤️ Survival<br><small>3 lives only</small>
+                    </button>
+                    <button class="modeBtn" data-mode="speedrun" style="width:140px;padding:15px;font-size:14px;cursor:pointer;background:#FF9800;border:none;color:white;border-radius:8px">
+                        🏃 Speed Run<br><small>100 pts fastest</small>
+                    </button>
+                    <button class="modeBtn" data-mode="precision" style="width:140px;padding:15px;font-size:14px;cursor:pointer;background:#9C27B0;border:none;color:white;border-radius:8px">
+                        🎯 Precision<br><small>Golden only</small>
+                    </button>
+                    <button class="modeBtn" data-mode="bossrush" style="width:140px;padding:15px;font-size:14px;cursor:pointer;background:#E91E63;border:none;color:white;border-radius:8px">
+                        👑 Boss Rush<br><small>Boss after boss</small>
+                    </button>
+                </div>
+                
+                <p style="margin-top:20px;font-size:12px;color:#666">
+                    Works on Desktop & VR Headsets
+                </p>
+            `;
+            document.body.appendChild(menu);
+            
+            // Add click handlers
+            menu.querySelectorAll('.modeBtn').forEach(btn => {
+                btn.onclick = () => {
+                    const selectedMode = btn.dataset.mode;
+                    menu.remove();
+                    launchGame(selectedMode);
+                };
             });
         }
-
-        // Start fallback mode for desktop testing
-        function startFallbackMode() {
-            // Initialize audio context on user interaction
+        
+        // Launch the game with selected mode
+        function launchGame(selectedMode) {
+            // Initialize audio
             initAudioContext();
             initMusicSystem();
 
-            // Hide AR-specific elements
+            // Hide any UI elements
             document.getElementById('startAR').classList.add('hidden');
-
-            // Remove the warning modal from the DOM
-            const warningElements = document.querySelectorAll('div[style*="position: absolute"][style*="left: 50%"][style*="top: 50%"]');
-            warningElements.forEach(element => {
-                if (element.innerHTML.includes('fallbackModeBtn')) {
-                    document.body.removeChild(element);
-                }
-            });
 
             // Initialize visual enhancements
             initVisualEnhancements();
@@ -1828,194 +1805,59 @@
             // Create weapon
             createWeapon();
 
-            // Position camera for desktop viewing
+            // Position camera for viewing
             camera.position.set(0, 1.6, 3);
             camera.lookAt(0, 0, 0);
 
-            // Create a floor and mole holes for desktop view
+            // Create floor and score sign
             createFloor();
             createScoreSign();
 
-            // Add mouse click interaction
+            // Add mouse click interaction for desktop
             window.addEventListener('click', onMouseClick);
             window.addEventListener('mousemove', onMouseMove);
+            
+            // Setup VR controller if available
+            setupVRController();
 
             // Start animation loop
             renderer.setAnimationLoop(render);
 
-            // Show game mode selection menu
-            createGameModeMenu();
-        }
-
-        // Handle AR session start
-        function onSessionStarted(session) {
-            debugPrint('AR session started!');
-            arSession = session;
-            
-            try {
-                debugPrint('Setting reference space...');
-                renderer.xr.setReferenceSpaceType('local-floor');
-                renderer.xr.setSession(session);
-                debugPrint('Session set on renderer');
-
-                // Setup controller for AR
-                debugPrint('Setting up controller...');
-                controller = renderer.xr.getController(0);
-                controller.addEventListener('select', onSelect);
-                scene.add(controller);
-
-                // Create controller grip
-                controllerGrip = renderer.xr.getControllerGrip(0);
-                scene.add(controllerGrip);
-                debugPrint('Controller added');
-
-                // Add laser pointer to controller for aiming
-                const laserGeo = new THREE.CylinderGeometry(0.004, 0.004, 5, 8);
-                const laserMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-                const laser = new THREE.Mesh(laserGeo, laserMat);
-                laser.rotation.x = Math.PI / 2;
-                laser.position.z = -2.5;
-                controller.add(laser);
-                
-                const laserDot = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.015, 8, 8),
-                    new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-                );
-                laserDot.position.z = -5;
-                controller.add(laserDot);
-                debugPrint('Laser pointer added');
-
-                // Handle session end
-                session.addEventListener('end', onSessionEnd);
-
-                // Add lighting for AR mode
-                debugPrint('Adding lights...');
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-                scene.add(ambientLight);
-
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-                directionalLight.position.set(0, 10, 5);
-                scene.add(directionalLight);
-
-                // Initialize audio
-                initMusicSystem();
-
-                // Initialize visual effects (particles and UI)
-                debugPrint('Initializing visual effects...');
-                initPhase4Particles();
-                initPhase5UI();
-
-                // Create scene content
-                debugPrint('Creating floor...');
-                createFloor();
-                
-                // Position play area in front of user
-                floorGroup.position.set(0, 0, -1.5);
-                moleGroup.position.set(0, 0, -1.5);
-                debugPrint('Floor & moles positioned at z=-1.5');
-                
-                // Add AR decorations (grass, rocks, flowers, bushes, fence)
-                createARDecorations();
-
-                // Start animation loop
-                debugPrint('Starting animation loop...');
-                renderer.setAnimationLoop(render);
-                debugPrint('Animation loop started');
-
-                // Start game in endless mode (skip menu in AR for simplicity)
-                debugPrint('Starting game...');
-                gameMode = 'endless';
-                currentChallenge = 'endless';
-                startGame();
-                debugPrint('Game started!');
-
-                // Hide UI elements in AR mode
-                document.getElementById('startAR').classList.add('hidden');
-            } catch (e) {
-                debugPrint('ERROR in onSessionStarted: ' + e.message);
-            }
-        }
-
-        // Handle AR session end
-        function onSessionEnd() {
-            arSession = null;
-            gameActive = false;
-
-            // Session ended - no background music to stop
+            // Set game mode and start
+            gameMode = selectedMode;
+            currentChallenge = selectedMode;
+            startChallenge(selectedMode);
+            startGame();
         }
         
-        // Create decorations for AR mode (simplified version of createBackgroundDecorations)
-        function createARDecorations() {
-            debugPrint('Creating AR decorations...');
-            const arOffset = -1.5;
+        // Setup VR controller for when entering VR mode
+        function setupVRController() {
+            controller = renderer.xr.getController(0);
+            controller.addEventListener('select', onSelect);
+            scene.add(controller);
             
-            // Grass around play area (outside the play zone)
-            const grassGeo = new THREE.ConeGeometry(0.015, 0.1, 4);
-            for (let i = 0; i < 80; i++) {
-                const grass = new THREE.Mesh(grassGeo, new THREE.MeshBasicMaterial({ color: 0x3d8c40 }));
-                const angle = Math.random() * Math.PI * 2;
-                const radius = 1.5 + Math.random() * 1.2; // Outside play area
-                grass.position.set(Math.cos(angle) * radius, 0.05, arOffset + Math.sin(angle) * radius);
-                grass.rotation.x = (Math.random() - 0.5) * 0.3;
-                grass.userData = { baseRotX: grass.rotation.x, phase: Math.random() * Math.PI * 2 };
-                scene.add(grass);
-                grassBlades.push(grass);
-            }
+            // Add laser pointer
+            const laserGeo = new THREE.CylinderGeometry(0.004, 0.004, 5, 8);
+            const laserMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const laser = new THREE.Mesh(laserGeo, laserMat);
+            laser.rotation.x = Math.PI / 2;
+            laser.position.z = -2.5;
+            controller.add(laser);
             
-            // Rocks (outside play area)
-            for (let i = 0; i < 6; i++) {
-                const rock = new THREE.Mesh(
-                    new THREE.DodecahedronGeometry(0.05 + Math.random() * 0.05, 0),
-                    new THREE.MeshBasicMaterial({ color: 0x666666 })
-                );
-                const angle = Math.random() * Math.PI * 2;
-                const radius = 1.8 + Math.random() * 0.8;
-                rock.position.set(Math.cos(angle) * radius, 0.03, arOffset + Math.sin(angle) * radius);
-                scene.add(rock);
-                rocks.push(rock);
-            }
-            
-            // Flowers (outside play area)
-            const flowerColors = [0xff6b6b, 0xffd93d, 0x6bcb77, 0x4d96ff];
-            for (let i = 0; i < 10; i++) {
-                const flower = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.03, 6, 6),
-                    new THREE.MeshBasicMaterial({ color: flowerColors[i % 4] })
-                );
-                const angle = Math.random() * Math.PI * 2;
-                const radius = 1.6 + Math.random() * 1;
-                flower.position.set(Math.cos(angle) * radius, 0.08, arOffset + Math.sin(angle) * radius);
-                flower.userData = { phase: Math.random() * Math.PI * 2 };
-                scene.add(flower);
-                flowers.push(flower);
-            }
-            
-            // Fence posts at edge of ground
-            for (let i = 0; i < 12; i++) {
-                const post = new THREE.Mesh(
-                    new THREE.BoxGeometry(0.03, 0.25, 0.03),
-                    new THREE.MeshBasicMaterial({ color: 0x8B4513 })
-                );
-                const angle = (i / 12) * Math.PI * 2;
-                post.position.set(Math.cos(angle) * 2.4, 0.125, arOffset + Math.sin(angle) * 2.4);
-                scene.add(post);
-                backgroundDecorations.push(post);
-            }
-            
-            // Bushes outside fence
-            for (let i = 0; i < 8; i++) {
-                const bush = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.1 + Math.random() * 0.05, 8, 8),
-                    new THREE.MeshBasicMaterial({ color: [0x2d5a2d, 0x3d6a3d, 0x4d7a4d][i % 3] })
-                );
-                const angle = (i / 8) * Math.PI * 2;
-                bush.position.set(Math.cos(angle) * 2.7, 0.08, arOffset + Math.sin(angle) * 2.7);
-                bush.scale.y = 0.6;
-                scene.add(bush);
-                backgroundDecorations.push(bush);
-            }
-            
-            debugPrint('AR decorations added');
+            const laserDot = new THREE.Mesh(
+                new THREE.SphereGeometry(0.015, 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+            );
+            laserDot.position.z = -5;
+            controller.add(laserDot);
+
+            controllerGrip = renderer.xr.getControllerGrip(0);
+            scene.add(controllerGrip);
+        }
+
+        // No longer needed - removed AR session handling
+        function onSessionEnd() {
+            gameActive = false;
         }
 
         // Create floor with dirt texture
@@ -2737,18 +2579,12 @@
         // Create dirt burst effect when creature emerges
         function createDirtBurst(position) {
             const dirtColors = [0x8B4513, 0x654321, 0x5C4033, 0x6B4423];
-            // Account for AR offset
-            const worldPos = position.clone();
-            if (arSession) {
-                worldPos.add(moleGroup.position);
-            }
-            
             for (let i = 0; i < 8; i++) {
                 const dirt = new THREE.Mesh(
                     new THREE.BoxGeometry(0.03, 0.03, 0.03),
                     new THREE.MeshBasicMaterial({ color: dirtColors[Math.floor(Math.random() * dirtColors.length)] })
                 );
-                dirt.position.copy(worldPos);
+                dirt.position.copy(position);
                 dirt.position.y = 0.05;
                 const angle = (i / 8) * Math.PI * 2;
                 const speed = 0.03 + Math.random() * 0.02;
@@ -2937,68 +2773,8 @@
         }
 
         // Create level complete UI
-        // 3D level complete panel for AR
-        let levelComplete3D = null;
-        
         function createLevelCompleteUI() {
-            if (arSession) {
-                // AR mode: create 3D panel
-                if (levelComplete3D) {
-                    scene.remove(levelComplete3D);
-                }
-                
-                levelComplete3D = new THREE.Group();
-                
-                // Panel background
-                const panel = new THREE.Mesh(
-                    new THREE.PlaneGeometry(0.8, 0.5),
-                    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
-                );
-                levelComplete3D.add(panel);
-                
-                // Border
-                const border = new THREE.Mesh(
-                    new THREE.PlaneGeometry(0.84, 0.54),
-                    new THREE.MeshBasicMaterial({ color: 0xFFD700, side: THREE.DoubleSide })
-                );
-                border.position.z = -0.001;
-                levelComplete3D.add(border);
-                
-                // Text via canvas
-                const canvas = document.createElement('canvas');
-                canvas.width = 512;
-                canvas.height = 320;
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#FFD700';
-                ctx.font = 'bold 40px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(`Level ${level} Complete!`, 256, 50);
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = '28px Arial';
-                ctx.fillText(`Score: ${score}`, 256, 100);
-                ctx.fillText(`Time: ${formatTime(gameTimer)}`, 256, 140);
-                if (maxCombo > 1) {
-                    ctx.fillStyle = '#FF6600';
-                    ctx.fillText(`Max Combo: ${maxCombo}x`, 256, 180);
-                }
-                ctx.fillStyle = '#4CAF50';
-                ctx.font = '24px Arial';
-                ctx.fillText(level >= 4 ? 'Pull trigger to restart' : 'Pull trigger for next level', 256, 240);
-                
-                const texture = new THREE.CanvasTexture(canvas);
-                const textPlane = new THREE.Mesh(
-                    new THREE.PlaneGeometry(0.76, 0.48),
-                    new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide })
-                );
-                textPlane.position.z = 0.001;
-                levelComplete3D.add(textPlane);
-                
-                levelComplete3D.position.set(0, 1.2, -2.8);
-                scene.add(levelComplete3D);
-                return;
-            }
-            
-            // Desktop mode: HTML UI
+            // HTML UI works for both desktop and VR browser
             if (levelCompleteUI) {
                 document.body.removeChild(levelCompleteUI);
             }
@@ -3116,10 +2892,6 @@
         // Start the game
         function startGame() {
             // Clean up any level complete UI
-            if (levelComplete3D) {
-                scene.remove(levelComplete3D);
-                levelComplete3D = null;
-            }
             if (levelCompleteUI) {
                 document.body.removeChild(levelCompleteUI);
                 levelCompleteUI = null;
@@ -3184,10 +2956,6 @@
             if (levelCompleteUI) {
                 document.body.removeChild(levelCompleteUI);
                 levelCompleteUI = null;
-            }
-            if (levelComplete3D) {
-                scene.remove(levelComplete3D);
-                levelComplete3D = null;
             }
 
             // Increment level
@@ -3273,19 +3041,6 @@
             tempMatrix.identity().extractRotation(controller.matrixWorld);
             raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
             raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-            
-            // Check if 3D level complete panel is showing
-            if (levelComplete3D) {
-                const uiHits = raycaster.intersectObjects(levelComplete3D.children, true);
-                if (uiHits.length > 0) {
-                    if (level >= 4) {
-                        startGame();
-                    } else {
-                        startNextLevel();
-                    }
-                    return;
-                }
-            }
             
             if (!gameActive) return;
 
@@ -3553,9 +3308,7 @@
                             setTimeout(() => child.material.color.setHex(orig), 100);
                         }
                     });
-                    const armoredHitPos = mole.position.clone();
-                    if (arSession && moleGroup) armoredHitPos.add(moleGroup.position);
-                    triggerHitEffect(armoredHitPos, 0x708090, 0.5);
+                    triggerHitEffect(mole.position.clone(), 0x708090, 0.5);
                     playHitSound('armoredGopher');
                     return;
                 }
@@ -3565,9 +3318,7 @@
             if (behavior === 'mimic') {
                 triggerDamageVignette();
                 score = Math.max(0, score - 5);
-                const mimicPos = mole.position.clone();
-                if (arSession && moleGroup) mimicPos.add(moleGroup.position);
-                showFloatingScore(-5, mimicPos, null);
+                showFloatingScore(-5, mole.position.clone(), null);
                 updateScoreSign(scoreSign, score);
             }
 
@@ -3575,11 +3326,8 @@
             mole.userData.active = false;
             mole.userData.wasHit = true;
 
-            // Create explosion effect at mole position (convert to world coords for AR)
+            // Create explosion effect at mole position
             const explosionPos = new THREE.Vector3().copy(mole.position);
-            if (arSession && moleGroup) {
-                explosionPos.add(moleGroup.position);
-            }
             explosionPos.y += 0.1;
 
             // === VISUAL EFFECTS ===
@@ -3733,12 +3481,8 @@
             const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
             const sprite = new THREE.Sprite(material);
 
-            // Position sprite - add moleGroup offset for AR mode
-            const worldPos = position.clone();
-            if (arSession) {
-                worldPos.add(moleGroup.position);
-            }
-            sprite.position.copy(worldPos);
+            // Position sprite
+            sprite.position.copy(position);
             sprite.position.y += 0.15;
             const baseScale = comboCount && comboCount >= 5 ? 0.5 : 0.35;
             sprite.scale.set(baseScale, baseScale * 0.5, 1);
