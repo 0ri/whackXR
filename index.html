@@ -3290,6 +3290,7 @@
             if (!gameActive) return;
 
             // Check for intersections with moles
+            if (!moleGroup) return;
             const intersects = raycaster.intersectObjects(moleGroup.children, true);
 
             if (intersects.length > 0) {
@@ -3552,7 +3553,9 @@
                             setTimeout(() => child.material.color.setHex(orig), 100);
                         }
                     });
-                    triggerHitEffect(mole.position, 0x708090, 0.5);
+                    const armoredHitPos = mole.position.clone();
+                    if (arSession && moleGroup) armoredHitPos.add(moleGroup.position);
+                    triggerHitEffect(armoredHitPos, 0x708090, 0.5);
                     playHitSound('armoredGopher');
                     return;
                 }
@@ -3562,7 +3565,9 @@
             if (behavior === 'mimic') {
                 triggerDamageVignette();
                 score = Math.max(0, score - 5);
-                showFloatingScore(-5, mole.position, null);
+                const mimicPos = mole.position.clone();
+                if (arSession && moleGroup) mimicPos.add(moleGroup.position);
+                showFloatingScore(-5, mimicPos, null);
                 updateScoreSign(scoreSign, score);
             }
 
@@ -3570,8 +3575,11 @@
             mole.userData.active = false;
             mole.userData.wasHit = true;
 
-            // Create explosion effect at mole position
+            // Create explosion effect at mole position (convert to world coords for AR)
             const explosionPos = new THREE.Vector3().copy(mole.position);
+            if (arSession && moleGroup) {
+                explosionPos.add(moleGroup.position);
+            }
             explosionPos.y += 0.1;
 
             // === VISUAL EFFECTS ===
@@ -4092,22 +4100,26 @@
             currentBiome = index % biomesExpanded.length;
             const biome = biomesExpanded[currentBiome];
             
-            // Update floor color
-            floorGroup.children.forEach(child => {
-                if (child.material && !child.userData?.isHole) {
-                    child.material.color.setHex(biome.groundColor);
-                }
-            });
+            // Update floor color (with safety check)
+            if (floorGroup && floorGroup.children) {
+                floorGroup.children.forEach(child => {
+                    if (child.material && !child.userData?.isHole) {
+                        child.material.color.setHex(biome.groundColor);
+                    }
+                });
+            }
             
             // Update ambient light
-            scene.children.forEach(child => {
-                if (child.isAmbientLight) {
-                    child.color.setHex(biome.ambient);
-                }
-            });
+            if (scene && scene.children) {
+                scene.children.forEach(child => {
+                    if (child.isAmbientLight) {
+                        child.color.setHex(biome.ambient);
+                    }
+                });
+            }
             
             // Update sky colors
-            if (skyMesh && skyMesh.material.uniforms) {
+            if (skyMesh && skyMesh.material && skyMesh.material.uniforms) {
                 skyMesh.material.uniforms.topColor.value.setHex(biome.skyTop);
                 skyMesh.material.uniforms.midColor.value.lerp(new THREE.Color(biome.skyBottom), 0.5);
             }
@@ -4116,7 +4128,9 @@
             updateBiomeVisuals();
             
             // Clear old environment particles
-            environmentParticles.forEach(p => biomeGroup.remove(p));
+            if (biomeGroup) {
+                environmentParticles.forEach(p => biomeGroup.remove(p));
+            }
             environmentParticles = [];
             
             // Create new environment particles
