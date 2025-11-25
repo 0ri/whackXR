@@ -1730,10 +1730,26 @@
             }
         }
 
-        // Check if WebXR AR is supported
+        // Track if VR is supported
+        let vrSupported = false;
+        let currentXRSession = null;
+        let selectedGameMode = 'endless';
+
+        // Check if WebXR VR is supported
         function checkXRSupport() {
-            // Show game mode menu directly in browser
-            showGameModeMenuHTML();
+            if (navigator.xr) {
+                navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                    vrSupported = supported;
+                    debugPrint('VR supported: ' + supported);
+                    showGameModeMenuHTML();
+                }).catch(() => {
+                    vrSupported = false;
+                    showGameModeMenuHTML();
+                });
+            } else {
+                vrSupported = false;
+                showGameModeMenuHTML();
+            }
         }
         
         // Show game mode menu in HTML (before 3D scene is created)
@@ -1746,9 +1762,22 @@
                 border-radius: 15px; font-family: Arial; text-align: center; z-index: 200;
                 max-width: 500px;
             `;
+            
+            const vrButtonHTML = vrSupported ? `
+                <div style="margin-bottom:20px;padding:15px;background:#222;border-radius:10px">
+                    <button id="enterVRBtn" style="width:100%;padding:20px;font-size:18px;cursor:pointer;background:#FF5722;border:none;color:white;border-radius:8px;font-weight:bold">
+                        🥽 ENTER VR MODE
+                    </button>
+                    <p style="margin:10px 0 0 0;font-size:11px;color:#888">Play in immersive VR on your headset</p>
+                </div>
+                <p style="color:#666;margin-bottom:15px">— OR play in 2D browser mode —</p>
+            ` : '';
+            
             menu.innerHTML = `
                 <h1 style="color:#FFD700;margin-top:0">🎮 WHACK-A-MOLE</h1>
                 <p style="color:#888;margin-bottom:20px">Select a game mode to start</p>
+                
+                ${vrButtonHTML}
                 
                 <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px">
                     <button class="modeBtn" data-mode="endless" style="width:140px;padding:15px;font-size:14px;cursor:pointer;background:#4CAF50;border:none;color:white;border-radius:8px">
@@ -1772,29 +1801,81 @@
                 </div>
                 
                 <p style="margin-top:20px;font-size:12px;color:#666">
-                    Works on Desktop & VR Headsets
+                    ${vrSupported ? 'VR headset detected!' : 'Desktop mode (no VR detected)'}
                 </p>
             `;
             document.body.appendChild(menu);
             
-            // Add click handlers
+            // VR button handler
+            const vrBtn = document.getElementById('enterVRBtn');
+            if (vrBtn) {
+                vrBtn.onclick = () => {
+                    menu.remove();
+                    startVRSession('endless');
+                };
+            }
+            
+            // 2D mode handlers
             menu.querySelectorAll('.modeBtn').forEach(btn => {
                 btn.onclick = () => {
                     const selectedMode = btn.dataset.mode;
                     menu.remove();
-                    launchGame(selectedMode);
+                    if (vrSupported) {
+                        // On VR device, ask if they want VR or 2D
+                        startVRSession(selectedMode);
+                    } else {
+                        launchGame(selectedMode, false);
+                    }
                 };
             });
         }
+
+        // Start WebXR VR session
+        async function startVRSession(mode) {
+            selectedGameMode = mode;
+            debugPrint('Starting VR session for mode: ' + mode);
+            
+            try {
+                const sessionInit = {
+                    optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
+                };
+                const session = await navigator.xr.requestSession('immersive-vr', sessionInit);
+                currentXRSession = session;
+                
+                debugPrint('VR session started!');
+                
+                session.addEventListener('end', onXRSessionEnd);
+                
+                await renderer.xr.setSession(session);
+                
+                // Now launch the game in VR mode
+                launchGame(mode, true);
+                
+            } catch (err) {
+                debugPrint('Failed to start VR: ' + err.message);
+                // Fall back to 2D mode
+                launchGame(mode, false);
+            }
+        }
+
+        // Handle XR session end
+        function onXRSessionEnd() {
+            debugPrint('VR session ended');
+            currentXRSession = null;
+            gameActive = false;
+        }
         
         // Launch the game with selected mode
-        function launchGame(selectedMode) {
+        function launchGame(selectedMode, isVRMode = false) {
+            debugPrint('Launching game: mode=' + selectedMode + ', VR=' + isVRMode);
+            
             // Initialize audio
             initAudioContext();
             initMusicSystem();
 
             // Hide any UI elements
-            document.getElementById('startAR').classList.add('hidden');
+            const startBtn = document.getElementById('startAR');
+            if (startBtn) startBtn.classList.add('hidden');
 
             // Initialize visual enhancements
             initVisualEnhancements();
@@ -1805,19 +1886,23 @@
             // Create weapon
             createWeapon();
 
-            // Position camera for viewing
-            camera.position.set(0, 1.6, 3);
-            camera.lookAt(0, 0, 0);
+            // Position camera - VR mode uses headset tracking, 2D needs fixed position
+            if (!isVRMode) {
+                camera.position.set(0, 1.6, 3);
+                camera.lookAt(0, 0, 0);
+            }
 
             // Create floor and score sign
             createFloor();
             createScoreSign();
 
-            // Add mouse click interaction for desktop
-            window.addEventListener('click', onMouseClick);
-            window.addEventListener('mousemove', onMouseMove);
+            // Add mouse click interaction for desktop (non-VR)
+            if (!isVRMode) {
+                window.addEventListener('click', onMouseClick);
+                window.addEventListener('mousemove', onMouseMove);
+            }
             
-            // Setup VR controller if available
+            // Setup VR controller
             setupVRController();
 
             // Start animation loop
