@@ -1847,9 +1847,6 @@
             createGameModeMenu();
         }
 
-        // Laser pointer for AR
-        let laserPointer = null;
-
         // Handle AR session start
         function onSessionStarted(session) {
             debugPrint('AR session started!');
@@ -1866,51 +1863,45 @@
                 controller = renderer.xr.getController(0);
                 controller.addEventListener('select', onSelect);
                 scene.add(controller);
-                
-                // Add laser pointer to controller - use cylinder for better visibility
-                const laserLength = 5;
-                const laserGeo = new THREE.CylinderGeometry(0.003, 0.003, laserLength, 8);
-                const laserMat = new THREE.MeshBasicMaterial({ color: 0x00FF00, transparent: true, opacity: 0.8 });
-                laserPointer = new THREE.Mesh(laserGeo, laserMat);
-                laserPointer.rotation.x = Math.PI / 2;
-                laserPointer.position.z = -laserLength / 2;
-                controller.add(laserPointer);
-                
-                // Add glowing dot at end of laser
-                const laserDot = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.015, 8, 8),
-                    new THREE.MeshBasicMaterial({ color: 0x00FF00 })
-                );
-                laserDot.position.z = -laserLength;
-                controller.add(laserDot);
-                
-                // Add a small sphere at controller tip
-                const tipSphere = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.02, 8, 8),
-                    new THREE.MeshBasicMaterial({ color: 0x00FF00 })
-                );
-                controller.add(tipSphere);
-                debugPrint('Laser pointer added to controller');
 
                 // Create controller grip
                 controllerGrip = renderer.xr.getControllerGrip(0);
                 scene.add(controllerGrip);
                 debugPrint('Controller added');
 
+                // Add laser pointer to controller for aiming
+                const laserGeo = new THREE.CylinderGeometry(0.004, 0.004, 5, 8);
+                const laserMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+                const laser = new THREE.Mesh(laserGeo, laserMat);
+                laser.rotation.x = Math.PI / 2;
+                laser.position.z = -2.5;
+                controller.add(laser);
+                
+                const laserDot = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.015, 8, 8),
+                    new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+                );
+                laserDot.position.z = -5;
+                controller.add(laserDot);
+                debugPrint('Laser pointer added');
+
                 // Handle session end
                 session.addEventListener('end', onSessionEnd);
 
                 // Add lighting for AR mode
                 debugPrint('Adding lights...');
-                const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
                 scene.add(ambientLight);
 
                 const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
                 directionalLight.position.set(0, 10, 5);
                 scene.add(directionalLight);
 
-                // Initialize visual effects
-                debugPrint('Initializing particles...');
+                // Initialize audio
+                initMusicSystem();
+
+                // Initialize visual effects (particles and UI)
+                debugPrint('Initializing visual effects...');
                 initPhase4Particles();
                 initPhase5UI();
 
@@ -1921,14 +1912,13 @@
                 // Position play area in front of user
                 floorGroup.position.set(0, 0, -1.5);
                 moleGroup.position.set(0, 0, -1.5);
-                debugPrint('Floor & moles positioned at 0, 0, -1.5');
+                debugPrint('Floor & moles positioned at z=-1.5');
                 
-                // Add terrain decorations for AR (simplified version)
+                // Add AR decorations (grass, rocks, flowers, bushes, fence)
                 createARDecorations();
                 
                 debugPrint('Creating score sign...');
                 createScoreSign();
-                // Position score sign relative to play area
                 if (scoreSign) {
                     scoreSign.position.set(1.2, 0, -1.5 - 1.2);
                 }
@@ -1938,39 +1928,48 @@
                 renderer.setAnimationLoop(render);
                 debugPrint('Animation loop started');
 
-                // Start game directly in AR (no menu)
+                // Start game in endless mode (skip menu in AR for simplicity)
                 debugPrint('Starting game...');
                 gameMode = 'endless';
                 currentChallenge = 'endless';
                 startGame();
                 debugPrint('Game started!');
 
-                // Hide HTML UI elements in AR mode
+                // Hide UI elements in AR mode
                 document.getElementById('startAR').classList.add('hidden');
             } catch (e) {
                 debugPrint('ERROR in onSessionStarted: ' + e.message);
             }
         }
+
+        // Handle AR session end
+        function onSessionEnd() {
+            arSession = null;
+            gameActive = false;
+
+            // Session ended - no background music to stop
+        }
         
-        // Create decorations for AR mode
+        // Create decorations for AR mode (simplified version of createBackgroundDecorations)
         function createARDecorations() {
             debugPrint('Creating AR decorations...');
-            const arOffset = -1.5; // Z offset for AR play area
+            const arOffset = -1.5;
             
             // Grass around play area
             const grassGeo = new THREE.ConeGeometry(0.015, 0.1, 4);
-            for (let i = 0; i < 100; i++) {
+            for (let i = 0; i < 80; i++) {
                 const grass = new THREE.Mesh(grassGeo, new THREE.MeshBasicMaterial({ color: 0x3d8c40 }));
                 const angle = Math.random() * Math.PI * 2;
                 const radius = 0.8 + Math.random() * 1.5;
                 grass.position.set(Math.cos(angle) * radius, 0.05, arOffset + Math.sin(angle) * radius);
                 grass.rotation.x = (Math.random() - 0.5) * 0.3;
+                grass.userData = { baseRotX: grass.rotation.x, phase: Math.random() * Math.PI * 2 };
                 scene.add(grass);
                 grassBlades.push(grass);
             }
             
             // Rocks
-            for (let i = 0; i < 8; i++) {
+            for (let i = 0; i < 6; i++) {
                 const rock = new THREE.Mesh(
                     new THREE.DodecahedronGeometry(0.05 + Math.random() * 0.05, 0),
                     new THREE.MeshBasicMaterial({ color: 0x666666 })
@@ -1984,7 +1983,7 @@
             
             // Flowers
             const flowerColors = [0xff6b6b, 0xffd93d, 0x6bcb77, 0x4d96ff];
-            for (let i = 0; i < 12; i++) {
+            for (let i = 0; i < 10; i++) {
                 const flower = new THREE.Mesh(
                     new THREE.SphereGeometry(0.03, 6, 6),
                     new THREE.MeshBasicMaterial({ color: flowerColors[i % 4] })
@@ -1992,16 +1991,18 @@
                 const angle = Math.random() * Math.PI * 2;
                 const radius = 1.2 + Math.random() * 1;
                 flower.position.set(Math.cos(angle) * radius, 0.08, arOffset + Math.sin(angle) * radius);
+                flower.userData = { phase: Math.random() * Math.PI * 2 };
                 scene.add(flower);
                 flowers.push(flower);
             }
             
-            // Bushes around play area
-            for (let i = 0; i < 10; i++) {
-                const bushGeo = new THREE.SphereGeometry(0.1 + Math.random() * 0.05, 8, 8);
-                const bushMat = new THREE.MeshBasicMaterial({ color: [0x2d5a2d, 0x3d6a3d, 0x4d7a4d][i % 3] });
-                const bush = new THREE.Mesh(bushGeo, bushMat);
-                const angle = (i / 10) * Math.PI * 2;
+            // Bushes
+            for (let i = 0; i < 8; i++) {
+                const bush = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1 + Math.random() * 0.05, 8, 8),
+                    new THREE.MeshBasicMaterial({ color: [0x2d5a2d, 0x3d6a3d, 0x4d7a4d][i % 3] })
+                );
+                const angle = (i / 8) * Math.PI * 2;
                 bush.position.set(Math.cos(angle) * 1.8, 0.08, arOffset + Math.sin(angle) * 1.8);
                 bush.scale.y = 0.6;
                 scene.add(bush);
@@ -2009,25 +2010,18 @@
             }
             
             // Fence posts
-            for (let i = 0; i < 12; i++) {
-                const postGeo = new THREE.BoxGeometry(0.03, 0.25, 0.03);
-                const postMat = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
-                const post = new THREE.Mesh(postGeo, postMat);
-                const angle = (i / 12) * Math.PI * 2;
+            for (let i = 0; i < 10; i++) {
+                const post = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.03, 0.25, 0.03),
+                    new THREE.MeshBasicMaterial({ color: 0x8B4513 })
+                );
+                const angle = (i / 10) * Math.PI * 2;
                 post.position.set(Math.cos(angle) * 1.6, 0.125, arOffset + Math.sin(angle) * 1.6);
                 scene.add(post);
                 backgroundDecorations.push(post);
             }
             
             debugPrint('AR decorations added');
-        }
-
-        // Handle AR session end
-        function onSessionEnd() {
-            arSession = null;
-            gameActive = false;
-
-            // Session ended - no background music to stop
         }
 
         // Create floor with dirt texture
@@ -2928,17 +2922,69 @@
             update();
         }
 
-        // 3D Level Complete UI for AR mode
+        // Create level complete UI
+        // 3D level complete panel for AR
         let levelComplete3D = null;
         
-        // Create level complete UI - use HTML for both modes for now
         function createLevelCompleteUI() {
-            createLevelCompleteHTML();
-        }
-        
-        // HTML Level Complete for desktop
-        function createLevelCompleteHTML() {
-            // Remove existing UI if present
+            if (arSession) {
+                // AR mode: create 3D panel
+                if (levelComplete3D) {
+                    scene.remove(levelComplete3D);
+                }
+                
+                levelComplete3D = new THREE.Group();
+                
+                // Panel background
+                const panel = new THREE.Mesh(
+                    new THREE.PlaneGeometry(0.8, 0.5),
+                    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+                );
+                levelComplete3D.add(panel);
+                
+                // Border
+                const border = new THREE.Mesh(
+                    new THREE.PlaneGeometry(0.84, 0.54),
+                    new THREE.MeshBasicMaterial({ color: 0xFFD700, side: THREE.DoubleSide })
+                );
+                border.position.z = -0.001;
+                levelComplete3D.add(border);
+                
+                // Text via canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 320;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 40px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Level ${level} Complete!`, 256, 50);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '28px Arial';
+                ctx.fillText(`Score: ${score}`, 256, 100);
+                ctx.fillText(`Time: ${formatTime(gameTimer)}`, 256, 140);
+                if (maxCombo > 1) {
+                    ctx.fillStyle = '#FF6600';
+                    ctx.fillText(`Max Combo: ${maxCombo}x`, 256, 180);
+                }
+                ctx.fillStyle = '#4CAF50';
+                ctx.font = '24px Arial';
+                ctx.fillText(level >= 4 ? 'Pull trigger to restart' : 'Pull trigger for next level', 256, 240);
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                const textPlane = new THREE.Mesh(
+                    new THREE.PlaneGeometry(0.76, 0.48),
+                    new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide })
+                );
+                textPlane.position.z = 0.001;
+                levelComplete3D.add(textPlane);
+                
+                levelComplete3D.position.set(0, 1.3, -1.2);
+                scene.add(levelComplete3D);
+                return;
+            }
+            
+            // Desktop mode: HTML UI
             if (levelCompleteUI) {
                 document.body.removeChild(levelCompleteUI);
             }
@@ -3006,6 +3052,7 @@
                 // This is the final level completion
                 nextButton.textContent = 'Restart Game';
                 nextButton.addEventListener('click', () => {
+                    // Restart the game from level 1
                     if (levelCompleteUI) {
                         document.body.removeChild(levelCompleteUI);
                         levelCompleteUI = null;
@@ -3054,7 +3101,7 @@
 
         // Start the game
         function startGame() {
-            // Clean up any existing level complete UIs
+            // Clean up any level complete UI
             if (levelComplete3D) {
                 scene.remove(levelComplete3D);
                 levelComplete3D = null;
@@ -3118,13 +3165,11 @@
 
         // Start the next level
         function startNextLevel() {
-            // Hide the level complete UI (HTML)
+            // Hide the level complete UI (both HTML and 3D)
             if (levelCompleteUI) {
                 document.body.removeChild(levelCompleteUI);
                 levelCompleteUI = null;
             }
-            
-            // Hide the 3D level complete UI (AR)
             if (levelComplete3D) {
                 scene.remove(levelComplete3D);
                 levelComplete3D = null;
@@ -3213,10 +3258,10 @@
             raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
             raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
             
-            // Check if 3D level complete UI is showing - handle click on it
+            // Check if 3D level complete panel is showing
             if (levelComplete3D) {
-                const uiIntersects = raycaster.intersectObjects(levelComplete3D.children, true);
-                if (uiIntersects.length > 0) {
+                const uiHits = raycaster.intersectObjects(levelComplete3D.children, true);
+                if (uiHits.length > 0) {
                     if (level >= 4) {
                         startGame();
                     } else {
@@ -3634,42 +3679,49 @@
 
             // Choose color based on points or combo
             if (comboCount && comboCount >= 5) {
-                ctx.fillStyle = '#FF00FF';
+                ctx.fillStyle = '#FF00FF'; // Purple for high combo
             } else if (comboCount && comboCount >= 3) {
-                ctx.fillStyle = '#FF6600';
+                ctx.fillStyle = '#FF6600'; // Orange for medium combo
             } else if (points >= 5) {
-                ctx.fillStyle = '#FFDD00';
+                ctx.fillStyle = '#FFDD00'; // Gold for high points
             } else if (points >= 3) {
-                ctx.fillStyle = '#6666FF';
+                ctx.fillStyle = '#6666FF'; // Blue for 3 points
             } else if (points >= 2) {
-                ctx.fillStyle = '#FF6666';
+                ctx.fillStyle = '#FF6666'; // Red for 2 points
             } else {
-                ctx.fillStyle = '#FFFFFF';
+                ctx.fillStyle = '#FFFFFF'; // White for 1 point
             }
 
+            // Add glow effect
             ctx.shadowColor = ctx.fillStyle;
             ctx.shadowBlur = 15;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Draw text with combo info
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             const text = comboCount ? `+${points} x${comboCount}` : `+${points}`;
             ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
+            // Create texture and sprite
             const texture = new THREE.CanvasTexture(canvas);
             const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
             const sprite = new THREE.Sprite(material);
 
-            // Position sprite - add moleGroup offset for AR
+            // Position sprite - add moleGroup offset for AR mode
             const worldPos = position.clone();
             if (arSession) {
                 worldPos.add(moleGroup.position);
             }
             sprite.position.copy(worldPos);
-            sprite.position.y += 0.2;
+            sprite.position.y += 0.15;
             const baseScale = comboCount && comboCount >= 5 ? 0.5 : 0.35;
             sprite.scale.set(baseScale, baseScale * 0.5, 1);
 
             scene.add(sprite);
 
+            // Animate with bounce and scale
             const startTime = Date.now();
             const duration = 1200;
             const startY = sprite.position.y;
@@ -3678,12 +3730,15 @@
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / duration, 1);
 
+                // Bounce up with easing
                 const bounce = Math.sin(progress * Math.PI) * 0.3;
                 sprite.position.y = startY + progress * 0.2 + bounce;
 
+                // Scale pop effect at start
                 const scalePop = progress < 0.1 ? 1 + (1 - progress / 0.1) * 0.3 : 1;
                 sprite.scale.set(baseScale * scalePop, baseScale * 0.5 * scalePop, 1);
 
+                // Fade out in last 40%
                 sprite.material.opacity = progress > 0.6 ? 1 - (progress - 0.6) / 0.4 : 1;
 
                 if (progress < 1) {
@@ -4783,8 +4838,7 @@
             };
             document.getElementById('closeSettings').onclick = toggleSettingsMenu;
         }
-
-        // === PHASE 4: GAME MODE SELECTION ===
+       // === PHASE 4: GAME MODE SELECTION ===
         function createGameModeMenu() {
             const menu = document.createElement('div');
             menu.id = 'gameModeMenu';
@@ -4837,4 +4891,117 @@
             weapons.forEach(w => {
                 const owned = unlockedWeapons.includes(w.id);
                 const canBuy = playerCoins >= (w.cost || 0);
-       
+                const isEquipped = currentWeapon.id === w.id;
+                
+                const btn = document.createElement('button');
+                btn.style.cssText = `
+                    width:100px;padding:8px;font-size:11px;cursor:pointer;
+                    background:${isEquipped ? '#FFD700' : owned ? '#4CAF50' : canBuy ? '#2196F3' : '#666'};
+                    border:none;color:${isEquipped ? '#000' : 'white'};border-radius:6px;
+                `;
+                btn.innerHTML = `
+                    ${w.name}<br>
+                    <small>${owned ? (isEquipped ? '✓ Equipped' : 'Click to equip') : `💰 ${w.cost}`}</small>
+                `;
+                btn.onclick = () => {
+                    if (owned) {
+                        currentWeapon = w;
+                        createGameModeMenu(); // Refresh
+                    } else if (canBuy) {
+                        playerCoins -= w.cost;
+                        unlockedWeapons.push(w.id);
+                        currentWeapon = w;
+                        saveProgress();
+                        createGameModeMenu(); // Refresh
+                    }
+                };
+                shop.appendChild(btn);
+            });
+            
+            menu.querySelectorAll('.modeBtn').forEach(btn => {
+                btn.onclick = () => {
+                    gameMode = btn.dataset.mode;
+                    currentChallenge = btn.dataset.mode;
+                    practiceMode = false;
+                    document.body.removeChild(menu);
+                    startChallenge(gameMode);
+                    startGame();
+                };
+            });
+        }
+
+        // === PHASE 4: ENHANCED STATS TRACKING ===
+        function trackHit() {
+            totalHits++;
+            checkAchievements();
+        }
+
+        function trackMiss() {
+            if (!practiceMode) totalMisses++;
+        }
+
+        function getAccuracy() {
+            const total = totalHits + totalMisses;
+            return total > 0 ? Math.round((totalHits / total) * 100) : 0;
+        }
+
+        // === PHASE 4: TIMED MODE ===
+        function updateTimedMode() {
+            if (gameMode !== 'timed' || !gameActive) return;
+            
+            const elapsed = Math.floor((Date.now() - levelStartTime) / 1000);
+            const remaining = Math.max(0, timedModeSeconds - elapsed);
+            
+            timerDisplay.textContent = `⏱️ Time: ${remaining}s`;
+            timerDisplay.style.color = remaining <= 10 ? '#FF0000' : 'white';
+            
+            if (remaining <= 0) {
+                endTimedMode();
+            }
+        }
+
+        function endTimedMode() {
+            gameActive = false;
+            gamePaused = true;
+            saveProgress();
+            
+            const results = document.createElement('div');
+            results.style.cssText = `
+                position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: rgba(0,0,0,0.9); color: white; padding: 30px;
+                border-radius: 15px; font-family: Arial; text-align: center; z-index: 200;
+            `;
+            results.innerHTML = `
+                <h2 style="color:#FFD700">⏱️ Time's Up!</h2>
+                <p style="font-size:24px">Final Score: <span style="color:#FFD700">${score}</span></p>
+                <p>Max Combo: ${maxCombo}x</p>
+                <p>Accuracy: ${getAccuracy()}%</p>
+                ${score > highScore ? '<p style="color:#FFD700">🏆 NEW HIGH SCORE!</p>' : ''}
+                <button id="playAgain" style="padding:15px 30px;margin:10px;font-size:18px;cursor:pointer;background:#4CAF50;border:none;color:white;border-radius:8px">Play Again</button>
+                <button id="mainMenu" style="padding:15px 30px;margin:10px;font-size:18px;cursor:pointer;background:#666;border:none;color:white;border-radius:8px">Main Menu</button>
+            `;
+            document.body.appendChild(results);
+            
+            document.getElementById('playAgain').onclick = () => {
+                document.body.removeChild(results);
+                startGame();
+            };
+            document.getElementById('mainMenu').onclick = () => {
+                document.body.removeChild(results);
+                createGameModeMenu();
+            };
+        }
+
+        // Initialize everything
+        loadProgress();
+        init();
+    </script>
+</head>
+
+<body>
+    <div id="container"></div>
+    <div id="info">Score: 0 | Level: 1</div>
+    <button id="startAR" class="hidden">Start AR Game</button>
+</body>
+
+</html>
